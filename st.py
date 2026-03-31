@@ -1,6 +1,7 @@
 import streamlit as st
 import os, sys, time
 from core.st_utils.imports_and_utils import *
+from core.st_utils.workflow_actions import prepare_step_run_plan
 from core.st_utils.log_viewer import list_preview_files, load_preview_content
 from core.st_utils.task_runner import TaskRunner
 from core.st_utils.workflow_registry import (
@@ -170,29 +171,59 @@ def _render_step_actions(stage, step, runner):
     else:
         st.caption("当前步骤尚未产生产物。")
 
-    action_columns = st.columns([1.1, 1.1, 1.1, 1.2])
+    action_columns = st.columns([1.0, 1.0, 1.2, 1.2, 1.1])
     if action_columns[0].button(
         "运行本步",
         key=f"run_only::{stage_id}::{step.step_id}",
         disabled=not can_run,
         use_container_width=True,
     ):
-        runner.start(build_runner_steps(stage_id, only_step_id=step.step_id))
+        plan = prepare_step_run_plan(stage_id=stage_id, step_id=step.step_id, action="run_only")
+        runner.start(plan.runner_steps)
         st.rerun()
 
     if action_columns[1].button(
-        "从本步重跑",
+        "仅重跑本步",
+        key=f"rerun_only::{stage_id}::{step.step_id}",
+        disabled=not can_run,
+        use_container_width=True,
+    ):
+        plan = prepare_step_run_plan(
+            stage_id=stage_id,
+            step_id=step.step_id,
+            action="rerun_only",
+        )
+        if plan.deleted_artifacts:
+            _set_workflow_flash(
+                stage_id,
+                "已清理当前步骤产物，并准备仅重跑本步：\n" + "\n".join(plan.deleted_artifacts),
+                "info",
+            )
+        runner.start(plan.runner_steps)
+        st.rerun()
+
+    if action_columns[2].button(
+        "从本步重跑到结束",
         key=f"rerun_from::{stage_id}::{step.step_id}",
         disabled=not can_run,
         use_container_width=True,
     ):
-        deleted = cleanup_stage_outputs(stage_id, step.step_id, include_downstream=True)
-        if deleted:
-            _set_workflow_flash(stage_id, "已清理并准备从当前步骤重跑：\n" + "\n".join(deleted), "info")
-        runner.start(build_runner_steps(stage_id, start_step_id=step.step_id))
+        plan = prepare_step_run_plan(
+            stage_id=stage_id,
+            step_id=step.step_id,
+            action="rerun_from_here",
+        )
+        if plan.deleted_artifacts:
+            _set_workflow_flash(
+                stage_id,
+                "已清理当前步骤及下游产物，并准备从当前步骤继续运行到阶段结束：\n"
+                + "\n".join(plan.deleted_artifacts),
+                "info",
+            )
+        runner.start(plan.runner_steps)
         st.rerun()
 
-    if action_columns[2].button(
+    if action_columns[3].button(
         "清理本步及下游",
         key=f"cleanup::{stage_id}::{step.step_id}",
         disabled=runner.is_active,
@@ -205,7 +236,7 @@ def _render_step_actions(stage, step, runner):
             _set_workflow_flash(stage_id, "当前没有匹配到可清理的产物。", "info")
         st.rerun()
 
-    if action_columns[3].button(
+    if action_columns[4].button(
         "查看日志",
         key=f"toggle_logs::{stage_id}::{step.step_id}",
         use_container_width=True,

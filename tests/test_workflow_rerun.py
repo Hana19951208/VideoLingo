@@ -94,6 +94,54 @@ class WorkflowRerunTests(unittest.TestCase):
             {"current.txt", "downstream.txt"},
         )
 
+    def test_prepare_step_run_plan_for_single_step_rerun_keeps_downstream(self):
+        from core.st_utils.workflow_actions import prepare_step_run_plan
+        from core.st_utils.workflow_registry import WorkflowStep
+
+        upstream = self.temp_dir / "upstream.txt"
+        current = self.temp_dir / "current.txt"
+        downstream = self.temp_dir / "downstream.txt"
+        for path in [upstream, current, downstream]:
+            path.write_text("data", encoding="utf-8")
+
+        stage_steps = (
+            WorkflowStep(
+                stage_id="text",
+                step_id="b1",
+                title="Upstream",
+                run=lambda: None,
+                artifact_patterns=(str(upstream),),
+            ),
+            WorkflowStep(
+                stage_id="text",
+                step_id="b2",
+                title="Current",
+                run=lambda: None,
+                artifact_patterns=(str(current),),
+            ),
+            WorkflowStep(
+                stage_id="text",
+                step_id="b3",
+                title="Downstream",
+                run=lambda: None,
+                artifact_patterns=(str(downstream),),
+            ),
+        )
+
+        plan = prepare_step_run_plan(
+            stage_id="text",
+            step_id="b2",
+            action="rerun_only",
+            stage_steps=stage_steps,
+        )
+
+        self.assertTrue(upstream.exists())
+        self.assertFalse(current.exists())
+        self.assertTrue(downstream.exists())
+        self.assertEqual(plan.deleted_artifacts, [str(current).replace("\\", "/")])
+        self.assertEqual(len(plan.runner_steps), 1)
+        self.assertEqual(plan.runner_steps[0][0], "Current")
+
     def test_log_viewer_previews_text_json_and_xlsx(self):
         from core.st_utils.log_viewer import load_preview_content
 
