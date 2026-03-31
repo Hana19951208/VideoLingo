@@ -11,9 +11,9 @@ display_language: "zh-CN"
 
 # API settings
 api:
-  key: 'your-api-key'
-  base_url: 'https://yunwu.ai'
-  model: ''
+  key: 'sk-05e4bbf007b34a2c9d015222643221f8'
+  base_url: 'https://api.deepseek.com'
+  model: 'deepseek-chat'
   llm_support_json: false
 # *Number of LLM multi-threaded accesses, set to 1 if using local LLM
 max_workers: 4
@@ -39,6 +39,14 @@ whisper:
 
 # Whether to burn subtitles into the video
 burn_subtitles: true
+
+subtitle_mask:
+  enabled: false
+  x_pct: 0
+  y_pct: 78
+  w_pct: 100
+  h_pct: 22
+  fill_color: 'black@0.85'
 
 ## ======================== Advanced Settings ======================== ##
 # *🔬 h264_nvenc GPU acceleration for ffmpeg, make sure your GPU supports it
@@ -71,7 +79,14 @@ pause_before_translate: false
 
 ## ======================== Dubbing Settings ======================== ##
 # TTS selection [sf_fish_tts, openai_tts, gpt_sovits, azure_tts, fish_tts, edge_tts, custom_tts]
-tts_method: 'azure_tts'
+tts_method: 'custom_tts'
+
+# Local index-tts Docker API Configuration
+custom_tts:
+  url: 'http://127.0.0.1:8000/v1/tts'
+  reference_mode: 'auto_single'
+  spk_audio: 'reference_audio.wav' # You MUST put the speaker clone reference audio file here
+
 
 # SiliconFlow FishTTS
 sf_fish_tts:

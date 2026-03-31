@@ -12,8 +12,14 @@ from __future__ import annotations
 
 import threading
 import time
+import traceback
+from datetime import datetime
+from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Callable
+
+
+TASK_RUNNER_LOG = Path("logs") / "task_runner_errors.log"
 
 
 class StopTask(Exception):
@@ -141,5 +147,11 @@ class TaskRunner:
 
             self.state = "completed"
         except Exception as e:
+            TASK_RUNNER_LOG.parent.mkdir(parents=True, exist_ok=True)
+            traceback_text = traceback.format_exc()
+            with TASK_RUNNER_LOG.open("a", encoding="utf-8") as log_file:
+                log_file.write(f"\n[{datetime.now().isoformat()}] step={self.current_label}\n")
+                log_file.write(traceback_text)
+                log_file.write("\n")
             self.error_msg = str(e)
             self.state = "error"

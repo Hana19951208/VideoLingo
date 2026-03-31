@@ -27,6 +27,10 @@ def parse_df_srt_time(time_str: str) -> float:
     seconds, milliseconds = seconds.split('.')
     return int(hours) * 3600 + int(minutes) * 60 + int(seconds) + int(milliseconds) / 1000
 
+
+def _to_plain_float(value) -> float:
+    return float(value)
+
 def adjust_audio_speed(input_file: str, output_file: str, speed_factor: float) -> None:
     """Adjust audio speed and handle edge cases"""
     # If the speed factor is close to 1, directly copy the file
@@ -169,8 +173,10 @@ def merge_chunks(tasks_df: pd.DataFrame) -> pd.DataFrame:
                     output_file = OUTPUT_FILE_TEMPLATE.format(f"{number}_{line_index}")
                     adjust_audio_speed(temp_file, output_file, speed_factor)
                     ad_dur = get_audio_duration(output_file)
-                    new_sub_times.append([cur_time, cur_time+ad_dur])
-                    cur_time += ad_dur
+                    start_time = _to_plain_float(cur_time)
+                    end_time = _to_plain_float(cur_time + ad_dur)
+                    new_sub_times.append([start_time, end_time])
+                    cur_time = end_time
                 # 🔄 Step3: Find corresponding main DataFrame index and update new_sub_times
                 main_df_idx = tasks_df[tasks_df['number'] == row['number']].index[0]
                 tasks_df.at[main_df_idx, 'new_sub_times'] = new_sub_times
