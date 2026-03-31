@@ -179,6 +179,10 @@ def _get_audio_steps():
             ),
         ),
         (t("Extract reference audio"), _9_refer_audio.extract_refer_audio_main),
+        (
+            t("Select automatic reference audio"),
+            _9_1_select_reference_audio.select_reference_audio_main,
+        ),
         (t("Generate and merge audio files"), _10_gen_audio.gen_audio),
         (t("Merge full audio"), _11_merge_audio.merge_full_audio),
         (t("Merge final audio into video"), _12_dub_to_vid.merge_video_audio),
@@ -198,8 +202,10 @@ def audio_processing_section():
         <p style='font-size: 20px;'>
             1. {t("Generate audio tasks and chunks")}<br>
             2. {t("Extract reference audio")}<br>
-            3. {t("Generate and merge audio files")}<br>
-            4. {t("Merge final audio into video")}
+            3. {t("Select automatic reference audio")}<br>
+            4. {t("Generate and merge audio files")}<br>
+            5. {t("Merge full audio")}<br>
+            6. {t("Merge final audio into video")}
         """,
             unsafe_allow_html=True,
         )

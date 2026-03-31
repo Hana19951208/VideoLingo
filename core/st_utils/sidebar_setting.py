@@ -226,6 +226,66 @@ def page_setting():
         if burn_subtitles != load_key("burn_subtitles"):
             update_key("burn_subtitles", burn_subtitles)
             st.rerun()
+        if burn_subtitles:
+            st.info(
+                t(
+                    "If downloaded video still shows subtitles, they are likely hard subtitles embedded in the source video."
+                )
+            )
+            subtitle_mask_enabled = st.toggle(
+                t("Mask hard subtitles"),
+                value=load_key("subtitle_mask.enabled"),
+                help=t("Cover source hard subtitles before burning translated subtitles"),
+            )
+            if subtitle_mask_enabled != load_key("subtitle_mask.enabled"):
+                update_key("subtitle_mask.enabled", subtitle_mask_enabled)
+                st.rerun()
+
+            if subtitle_mask_enabled:
+                mask_col1, mask_col2 = st.columns(2)
+                with mask_col1:
+                    x_pct = st.slider(
+                        t("Mask X (%)"),
+                        min_value=0,
+                        max_value=100,
+                        value=int(load_key("subtitle_mask.x_pct")),
+                    )
+                    w_pct = st.slider(
+                        t("Mask Width (%)"),
+                        min_value=0,
+                        max_value=100,
+                        value=int(load_key("subtitle_mask.w_pct")),
+                    )
+                    if x_pct != load_key("subtitle_mask.x_pct"):
+                        update_key("subtitle_mask.x_pct", x_pct)
+                    if w_pct != load_key("subtitle_mask.w_pct"):
+                        update_key("subtitle_mask.w_pct", w_pct)
+                with mask_col2:
+                    y_pct = st.slider(
+                        t("Mask Y (%)"),
+                        min_value=0,
+                        max_value=100,
+                        value=int(load_key("subtitle_mask.y_pct")),
+                    )
+                    h_pct = st.slider(
+                        t("Mask Height (%)"),
+                        min_value=0,
+                        max_value=100,
+                        value=int(load_key("subtitle_mask.h_pct")),
+                    )
+                    if y_pct != load_key("subtitle_mask.y_pct"):
+                        update_key("subtitle_mask.y_pct", y_pct)
+                    if h_pct != load_key("subtitle_mask.h_pct"):
+                        update_key("subtitle_mask.h_pct", h_pct)
+
+                mask_fill_color = st.text_input(
+                    t("Mask Fill Color"),
+                    value=load_key("subtitle_mask.fill_color"),
+                    help="FFmpeg drawbox color, e.g. black@0.85",
+                )
+                if mask_fill_color != load_key("subtitle_mask.fill_color"):
+                    update_key("subtitle_mask.fill_color", mask_fill_color)
+                    st.rerun()
     with st.expander(t("Dubbing Settings"), expanded=True):
         tts_methods = [
             "azure_tts",
@@ -322,6 +382,29 @@ def page_setting():
 
         elif select_tts == "f5tts":
             config_input("302ai API", "f5tts.302_api")
+
+        elif select_tts == "custom_tts":
+            config_input(t("Custom TTS URL"), "custom_tts.url")
+            reference_modes = {
+                "manual": t("Manual reference audio"),
+                "auto_single": t("Auto single-speaker reference"),
+            }
+            selected_reference_mode = st.selectbox(
+                t("Reference Audio Mode"),
+                options=list(reference_modes.keys()),
+                format_func=lambda key: reference_modes[key],
+                index=list(reference_modes.keys()).index(load_key("custom_tts.reference_mode")),
+            )
+            if selected_reference_mode != load_key("custom_tts.reference_mode"):
+                update_key("custom_tts.reference_mode", selected_reference_mode)
+                st.rerun()
+
+            if selected_reference_mode == "manual":
+                config_input(t("Reference Audio Path"), "custom_tts.spk_audio")
+            else:
+                st.caption(
+                    t("Auto mode will choose one clean single-speaker clip from the video vocals track.")
+                )
 
 
 def check_api():

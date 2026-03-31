@@ -122,5 +122,20 @@
     "Task completed!": "Task completed!",
     "Task stopped": "Task stopped",
     "Task error": "Task error",
-    "OK": "OK"
+    "OK": "OK",
+    "If downloaded video still shows subtitles, they are likely hard subtitles embedded in the source video.": "If downloaded video still shows subtitles, they are likely hard subtitles embedded in the source video.",
+    "Mask hard subtitles": "Mask hard subtitles",
+    "Cover source hard subtitles before burning translated subtitles": "Cover source hard subtitles before burning translated subtitles",
+    "Mask X (%)": "Mask X (%)",
+    "Mask Y (%)": "Mask Y (%)",
+    "Mask Width (%)": "Mask Width (%)",
+    "Mask Height (%)": "Mask Height (%)",
+    "Mask Fill Color": "Mask Fill Color",
+    "Custom TTS URL": "Custom TTS URL",
+    "Reference Audio Mode": "Reference Audio Mode",
+    "Manual reference audio": "Manual reference audio",
+    "Auto single-speaker reference": "Auto single-speaker reference",
+    "Reference Audio Path": "Reference Audio Path",
+    "Auto mode will choose one clean single-speaker clip from the video vocals track.": "Auto mode will choose one clean single-speaker clip from the video vocals track.",
+    "Select automatic reference audio": "Select automatic reference audio"
 }
