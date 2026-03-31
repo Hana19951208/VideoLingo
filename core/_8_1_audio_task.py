@@ -3,7 +3,7 @@ import re
 import pandas as pd
 from rich.console import Console
 from rich.panel import Panel
-from core.prompts import get_subtitle_trim_prompt
+from core._shared_prompts import get_subtitle_trim_prompt
 from core.tts_backend.estimate_duration import init_estimator, estimate_duration
 from core.utils import *
 from core.utils.models import *

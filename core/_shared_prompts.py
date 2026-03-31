@@ -1,5 +1,6 @@
 import json
 from core.utils import *
+from core._shared_terminology import build_glossary_prompt
 
 ## ================================================================
 # @ step4_splitbymeaning.py
@@ -54,13 +55,14 @@ def get_summary_prompt(source_content, custom_terms_json=None):
     src_lang = load_key("whisper.detected_language")
     tgt_lang = load_key("target_language")
     
-    # add custom terms note
     terms_note = ""
-    if custom_terms_json:
-        terms_list = []
-        for term in custom_terms_json['terms']:
-            terms_list.append(f"- {term['src']}: {term['tgt']} ({term['note']})")
-        terms_note = "\n### Existing Terms\nPlease exclude these terms in your extraction:\n" + "\n".join(terms_list)
+    if custom_terms_json and custom_terms_json.get("terms"):
+        glossary_prompt = build_glossary_prompt(custom_terms_json, title="User Glossary")
+        terms_note = (
+            f"\n{glossary_prompt}\n"
+            "When summarizing or extracting terms, normalize obvious ASR mistakes to the glossary first.\n"
+            "Do not re-extract glossary items unless they need a better note."
+        )
     
     summary_prompt = f"""
 ## Role
@@ -125,7 +127,12 @@ Note: Start you answer with ```json and end with ```, do not add any other text.
 
 ## ================================================================
 # @ step5_translate.py & translate_lines.py
-def generate_shared_prompt(previous_content_prompt, after_content_prompt, summary_prompt, things_to_note_prompt):
+def generate_shared_prompt(previous_content_prompt, after_content_prompt, summary_prompt, things_to_note_prompt, custom_terms_json=None):
+    glossary_prompt = build_glossary_prompt(custom_terms_json or {"terms": []}, title="User Glossary")
+    previous_content_prompt = previous_content_prompt or []
+    after_content_prompt = after_content_prompt or []
+    things_to_note_prompt = things_to_note_prompt or "None"
+    glossary_prompt = glossary_prompt or "None"
     return f'''### Context Information
 <previous_content>
 {previous_content_prompt}
@@ -137,6 +144,9 @@ def generate_shared_prompt(previous_content_prompt, after_content_prompt, summar
 
 ### Content Summary
 {summary_prompt}
+
+### User Terminology
+{glossary_prompt}
 
 ### Points to Note
 {things_to_note_prompt}'''
@@ -163,6 +173,7 @@ We have a segment of original {src_language} subtitles that need to be directly 
 1. Translate the original {src_language} subtitles into {TARGET_LANGUAGE} line by line
 2. Ensure the translation is faithful to the original, accurately conveying the original meaning
 3. Consider the context and professional terminology
+4. If the original contains near-homophones, misspellings, or contextually obvious ASR mistakes for glossary terms, normalize them before translating
 
 {shared_prompt}
 
@@ -170,6 +181,7 @@ We have a segment of original {src_language} subtitles that need to be directly 
 1. Faithful to the original: Accurately convey the content and meaning of the original text, without arbitrarily changing, adding, or omitting content.
 2. Accurate terminology: Use professional terms correctly and maintain consistency in terminology.
 3. Understand the context: Fully comprehend and reflect the background and contextual relationships of the text.
+4. Treat user glossary entries as the source of truth when resolving likely ASR mistakes.
 </translation_principles>
 
 ## INPUT
@@ -215,6 +227,7 @@ Your task is to reflect on and improve these direct translations to create more 
 3. Perform free translation based on your analysis
 4. Do not add comments or explanations in the translation, as the subtitles are for the audience to read
 5. Do not leave empty lines in the free translation, as the subtitles are for the audience to read
+6. If a direct translation preserves an obvious ASR mistake for a glossary term, correct it before free translation
 
 {shared_prompt}
 
@@ -230,6 +243,7 @@ Please use a two-step thinking process to handle the text line by line:
    - Aim for contextual smoothness and naturalness, conforming to {TARGET_LANGUAGE} expression habits
    - Ensure it's easy for {TARGET_LANGUAGE} audience to understand and accept
    - Adapt the language style to match the theme (e.g., use casual language for tutorials, professional terminology for technical content, formal language for documentaries)
+   - Normalize likely ASR mistakes to the glossary term before finalizing the subtitle
 </Translation Analysis Steps>
    
 ## INPUT

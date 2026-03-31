@@ -3,7 +3,7 @@ from typing import List, Tuple
 import concurrent.futures
 
 from core._3_2_split_meaning import split_sentence
-from core.prompts import get_align_prompt
+from core._shared_prompts import get_align_prompt
 from rich.panel import Panel
 from rich.console import Console
 from rich.table import Table

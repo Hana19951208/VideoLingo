@@ -15,7 +15,7 @@ class YtDlpOptionsTests(unittest.TestCase):
 
 class SubtitleMaskFilterTests(unittest.TestCase):
     def test_mask_disabled_does_not_include_drawbox(self):
-        from core.video_filter_utils import build_burn_subtitle_filter
+        from core._shared_video_filter import build_burn_subtitle_filter
 
         filter_text = build_burn_subtitle_filter(
             target_width=1920,
@@ -27,7 +27,7 @@ class SubtitleMaskFilterTests(unittest.TestCase):
         self.assertNotIn("drawbox=", filter_text)
 
     def test_mask_enabled_inserts_drawbox_before_subtitles(self):
-        from core.video_filter_utils import build_burn_subtitle_filter
+        from core._shared_video_filter import build_burn_subtitle_filter
 
         filter_text = build_burn_subtitle_filter(
             target_width=1920,

@@ -8,7 +8,7 @@ import numpy as np
 
 from core._1_ytdlp import find_video_files
 from core.utils import *
-from core.video_filter_utils import build_burn_subtitle_filter
+from core._shared_video_filter import build_burn_subtitle_filter
 
 
 SRC_FONT_SIZE = 15

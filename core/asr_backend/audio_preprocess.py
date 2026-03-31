@@ -52,6 +52,19 @@ def convert_video_to_audio(video_file: str):
         subprocess.run(cmd, check=True, stderr=subprocess.PIPE)
         rprint(f"[green]🎬➡️🎵 Converted <{video_file}> to <{_RAW_AUDIO_FILE}> with FFmpeg\n[/green]")
 
+def convert_video_to_demucs_audio(video_file: str, output_path: str = _RAW_DEMUCS_AUDIO_FILE):
+    os.makedirs(_AUDIO_DIR, exist_ok=True)
+    if os.path.exists(output_path):
+        return output_path
+    cmd = [
+        'ffmpeg', '-y', '-i', video_file, '-vn',
+        '-c:a', 'pcm_s16le', '-ar', '44100', '-ac', '2',
+        '-f', 'wav', output_path
+    ]
+    subprocess.run(cmd, check=True, stderr=subprocess.PIPE)
+    rprint(f"[green]Converted <{video_file}> to Demucs input <{output_path}>[/green]")
+    return output_path
+
 def get_audio_duration(audio_file: str) -> float:
     """Get the duration of an audio file using ffmpeg."""
     cmd = ['ffmpeg', '-i', audio_file]

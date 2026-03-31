@@ -24,6 +24,11 @@ share/python-wheels/
 *.egg
 MANIFEST
 tests/
+!tests/
+!tests/test_asr_audio_pipeline.py
+!tests/test_audio_mixing_pipeline.py
+!tests/test_terminology_pipeline.py
+!tests/test_workflow_rerun.py
 
 # PyInstaller
 #  Usually these files are written by a python script from a template

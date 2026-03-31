@@ -1,6 +1,6 @@
 from core.utils import *
 from core.asr_backend.demucs_vl import demucs_audio
-from core.asr_backend.audio_preprocess import process_transcription, convert_video_to_audio, split_audio, save_results, normalize_audio_volume
+from core.asr_backend.audio_preprocess import process_transcription, convert_video_to_audio, convert_video_to_demucs_audio, split_audio, save_results, normalize_audio_volume
 from core._1_ytdlp import find_video_files
 from core.utils.models import *
 
@@ -12,6 +12,7 @@ def transcribe():
 
     # 2. Demucs vocal separation:
     if load_key("demucs"):
+        convert_video_to_demucs_audio(video_file)
         demucs_audio()
         vocal_audio = normalize_audio_volume(_VOCAL_AUDIO_FILE, _VOCAL_AUDIO_FILE, format="mp3")
     else:
@@ -33,8 +34,10 @@ def transcribe():
         from core.asr_backend.elevenlabs_asr import transcribe_audio_elevenlabs as ts
         rprint("[cyan]🎤 Transcribing audio with ElevenLabs API...[/cyan]")
 
+    recognition_audio = vocal_audio if load_key("demucs") else _RAW_AUDIO_FILE
+    alignment_audio = vocal_audio if load_key("demucs") else _RAW_AUDIO_FILE
     for start, end in segments:
-        result = ts(_RAW_AUDIO_FILE, vocal_audio, start, end)
+        result = ts(recognition_audio, alignment_audio, start, end)
         all_results.append(result)
     
     # 5. Combine results

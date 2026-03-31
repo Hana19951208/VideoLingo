@@ -1,8 +1,13 @@
 import json
-from core.prompts import get_summary_prompt
-import pandas as pd
+from core._shared_prompts import get_summary_prompt
 from core.utils import *
 from core.utils.models import _3_2_SPLIT_BY_MEANING, _4_1_TERMINOLOGY
+from core._shared_terminology import (
+    build_relevant_terms_prompt,
+    load_custom_terms,
+    load_terminology_terms,
+    merge_terms,
+)
 
 CUSTOM_TERMS_PATH = 'custom_terms.xlsx'
 
@@ -15,37 +20,13 @@ def combine_chunks():
     return combined_text[:load_key('summary_length')]  #! Return only the first x characters
 
 def search_things_to_note_in_prompt(sentence):
-    """Search for terms to note in the given sentence"""
-    with open(_4_1_TERMINOLOGY, 'r', encoding='utf-8') as file:
-        things_to_note = json.load(file)
-    things_to_note_list = [term['src'] for term in things_to_note['terms'] if term['src'].lower() in sentence.lower()]
-    if things_to_note_list:
-        prompt = '\n'.join(
-            f'{i+1}. "{term["src"]}": "{term["tgt"]}",'
-            f' meaning: {term["note"]}'
-            for i, term in enumerate(things_to_note['terms'])
-            if term['src'] in things_to_note_list
-        )
-        return prompt
-    else:
-        return None
+    return build_relevant_terms_prompt(sentence, load_terminology_terms())
 
 def get_summary():
     src_content = combine_chunks()
-    custom_terms = pd.read_excel(CUSTOM_TERMS_PATH)
-    custom_terms_json = {
-        "terms": 
-            [
-                {
-                    "src": str(row.iloc[0]),
-                    "tgt": str(row.iloc[1]), 
-                    "note": str(row.iloc[2])
-                }
-                for _, row in custom_terms.iterrows()
-            ]
-    }
-    if len(custom_terms) > 0:
-        rprint(f"📖 Custom Terms Loaded: {len(custom_terms)} terms")
+    custom_terms_json = load_custom_terms(CUSTOM_TERMS_PATH)
+    if custom_terms_json["terms"]:
+        rprint(f"📖 Custom Terms Loaded: {len(custom_terms_json['terms'])} terms")
         rprint("📝 Terms Content:", json.dumps(custom_terms_json, indent=2, ensure_ascii=False))
     summary_prompt = get_summary_prompt(src_content, custom_terms_json)
     rprint("📝 Summarizing and extracting terminology ...")
@@ -60,7 +41,10 @@ def get_summary():
         return {"status": "success", "message": "Summary completed"}
 
     summary = ask_gpt(summary_prompt, resp_type='json', valid_def=valid_summary, log_title='summary')
-    summary['terms'].extend(custom_terms_json['terms'])
+    summary = {
+        "theme": summary.get("theme", ""),
+        "terms": merge_terms(summary, custom_terms_json)["terms"],
+    }
     
     with open(_4_1_TERMINOLOGY, 'w', encoding='utf-8') as f:
         json.dump(summary, f, ensure_ascii=False, indent=4)

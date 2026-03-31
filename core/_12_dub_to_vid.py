@@ -9,7 +9,7 @@ from core._1_ytdlp import find_video_files
 from core.asr_backend.audio_preprocess import normalize_audio_volume
 from core.utils import *
 from core.utils.models import *
-from core.video_filter_utils import build_burn_subtitle_filter
+from core._shared_video_filter import build_burn_subtitle_filter
 
 
 console = Console()
@@ -29,6 +29,35 @@ TRANS_FONT_COLOR = "&H00FFFF"
 TRANS_OUTLINE_COLOR = "&H000000"
 TRANS_OUTLINE_WIDTH = 1
 TRANS_BACK_COLOR = "&H33000000"
+
+
+def build_audio_mix_filter():
+    return (
+        "[1:a]volume=0.35[bg];"
+        "[bg][2:a]sidechaincompress=threshold=0.015:ratio=8:attack=20:release=250[bgduck];"
+        "[bgduck][2:a]amix=inputs=2:duration=first:dropout_transition=3[a]"
+    )
+
+
+def build_merge_command(video_file, background_file, normalized_dub_audio, subtitle_filter, ffmpeg_gpu):
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        video_file,
+        "-i",
+        background_file,
+        "-i",
+        normalized_dub_audio,
+        "-filter_complex",
+        f"[0:v]{subtitle_filter}[v];{build_audio_mix_filter()}",
+    ]
+    if ffmpeg_gpu:
+        cmd.extend(["-map", "[v]", "-map", "[a]", "-c:v", "h264_nvenc"])
+    else:
+        cmd.extend(["-map", "[v]", "-map", "[a]"])
+    cmd.extend(["-c:a", "aac", "-b:a", "96k", DUB_VIDEO])
+    return cmd
 
 
 def merge_video_audio():
@@ -70,26 +99,16 @@ def merge_video_audio():
         ],
     )
 
-    cmd = [
-        "ffmpeg",
-        "-y",
-        "-i",
-        VIDEO_FILE,
-        "-i",
-        background_file,
-        "-i",
-        normalized_dub_audio,
-        "-filter_complex",
-        f"[0:v]{subtitle_filter}[v];[1:a][2:a]amix=inputs=2:duration=first:dropout_transition=3[a]",
-    ]
-
-    if load_key("ffmpeg_gpu"):
+    ffmpeg_gpu = load_key("ffmpeg_gpu")
+    if ffmpeg_gpu:
         rprint("[bold green]Using GPU acceleration...[/bold green]")
-        cmd.extend(["-map", "[v]", "-map", "[a]", "-c:v", "h264_nvenc"])
-    else:
-        cmd.extend(["-map", "[v]", "-map", "[a]"])
-
-    cmd.extend(["-c:a", "aac", "-b:a", "96k", DUB_VIDEO])
+    cmd = build_merge_command(
+        video_file=VIDEO_FILE,
+        background_file=background_file,
+        normalized_dub_audio=normalized_dub_audio,
+        subtitle_filter=subtitle_filter,
+        ffmpeg_gpu=ffmpeg_gpu,
+    )
     subprocess.run(cmd, check=True)
     rprint(f"[bold green]Video and audio successfully merged into {DUB_VIDEO}[/bold green]")
 

@@ -1,4 +1,8 @@
-from core.prompts import generate_shared_prompt, get_prompt_faithfulness, get_prompt_expressiveness
+from core._shared_prompts import (
+    generate_shared_prompt,
+    get_prompt_expressiveness,
+    get_prompt_faithfulness,
+)
 from rich.panel import Panel
 from rich.console import Console
 from rich.table import Table
@@ -18,8 +22,8 @@ def valid_translate_result(result: dict, required_keys: list, required_sub_keys:
 
     return {"status": "success", "message": "Translation completed"}
 
-def translate_lines(lines, previous_content_prompt, after_cotent_prompt, things_to_note_prompt, summary_prompt, index = 0):
-    shared_prompt = generate_shared_prompt(previous_content_prompt, after_cotent_prompt, summary_prompt, things_to_note_prompt)
+def translate_lines(lines, previous_content_prompt, after_cotent_prompt, things_to_note_prompt, summary_prompt, custom_terms_json=None, index = 0):
+    shared_prompt = generate_shared_prompt(previous_content_prompt, after_cotent_prompt, summary_prompt, things_to_note_prompt, custom_terms_json)
 
     # Retry translation if the length of the original text and the translated text are not the same, or if the specified key is missing
     def retry_translation(prompt, length, step_name):

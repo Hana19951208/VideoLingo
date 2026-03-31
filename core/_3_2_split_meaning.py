@@ -1,7 +1,7 @@
 import concurrent.futures
 from difflib import SequenceMatcher
 import math
-from core.prompts import get_split_prompt
+from core._shared_prompts import get_split_prompt
 from core.spacy_utils.load_nlp_model import init_nlp
 from core.utils import *
 from rich.console import Console

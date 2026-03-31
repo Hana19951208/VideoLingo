@@ -32,6 +32,7 @@ import whisperx
 from whisperx.audio import load_audio as _whisperx_load_audio, SAMPLE_RATE as _WHISPERX_SR
 from rich import print as rprint
 from core.utils import *
+from core._shared_terminology import build_asr_hints, load_custom_terms
 MODEL_DIR = load_key("model_dir")
 
 @except_handler("failed to check hf mirror", default_return=None)
@@ -59,7 +60,16 @@ def check_hf_mirror():
     return fastest_url
 
 @except_handler("WhisperX processing error:")
-def transcribe_audio(raw_audio_file, vocal_audio_file, start, end):
+def build_asr_options():
+    hints = build_asr_hints(load_custom_terms())
+    return {
+        "temperatures": [0],
+        "initial_prompt": hints["initial_prompt"] or None,
+        "hotwords": hints["hotwords"] or None,
+    }
+
+@except_handler("WhisperX processing error:")
+def transcribe_audio(recognition_audio_file, align_audio_file, start, end):
     os.environ['HF_ENDPOINT'] = check_hf_mirror()
     WHISPER_LANGUAGE = load_key("whisper.language")
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -90,7 +100,7 @@ def transcribe_audio(raw_audio_file, vocal_audio_file, start, end):
         rprint(f"[green]📥 Using WHISPER model from HuggingFace:[/green] {model_name} ...")
 
     vad_options = {"vad_onset": 0.500,"vad_offset": 0.363}
-    asr_options = {"temperatures": [0],"initial_prompt": "",}
+    asr_options = build_asr_options()
     whisper_language = None if 'auto' in WHISPER_LANGUAGE else WHISPER_LANGUAGE
     rprint("[bold yellow] You can ignore warning of `Model was trained with torch 1.10.0+cu102, yours is 2.0.0+cu118...`[/bold yellow]")
     model = whisperx.load_model(model_name, device, compute_type=compute_type, language=whisper_language, vad_options=vad_options, asr_options=asr_options, download_root=MODEL_DIR)
@@ -103,15 +113,12 @@ def transcribe_audio(raw_audio_file, vocal_audio_file, start, end):
         end_sample = int(end * _WHISPERX_SR)
         return full_audio[start_sample:end_sample]
 
-    raw_audio_segment = load_audio_segment(raw_audio_file, start, end)
-    vocal_audio_segment = load_audio_segment(vocal_audio_file, start, end)
+    recognition_audio_segment = load_audio_segment(recognition_audio_file, start, end)
+    align_audio_segment = load_audio_segment(align_audio_file, start, end)
     
-    # -------------------------
-    # 1. transcribe raw audio
-    # -------------------------
     transcribe_start_time = time.time()
     rprint("[bold green]Note: You will see Progress if working correctly ↓[/bold green]")
-    result = model.transcribe(raw_audio_segment, batch_size=batch_size, print_progress=True)
+    result = model.transcribe(recognition_audio_segment, batch_size=batch_size, print_progress=True)
     transcribe_time = time.time() - transcribe_start_time
     rprint(f"[cyan]⏱️ time transcribe:[/cyan] {transcribe_time:.2f}s")
 
@@ -124,13 +131,9 @@ def transcribe_audio(raw_audio_file, vocal_audio_file, start, end):
     if result['language'] == 'zh' and WHISPER_LANGUAGE != 'zh':
         raise ValueError("Please specify the transcription language as zh and try again!")
 
-    # -------------------------
-    # 2. align by vocal audio
-    # -------------------------
     align_start_time = time.time()
-    # Align timestamps using vocal audio
     model_a, metadata = whisperx.load_align_model(language_code=result["language"], device=device)
-    result = whisperx.align(result["segments"], model_a, metadata, vocal_audio_segment, device, return_char_alignments=False)
+    result = whisperx.align(result["segments"], model_a, metadata, align_audio_segment, device, return_char_alignments=False)
     align_time = time.time() - align_start_time
     rprint(f"[cyan]⏱️ time align:[/cyan] {align_time:.2f}s")
 

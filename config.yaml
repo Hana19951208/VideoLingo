@@ -23,6 +23,10 @@ target_language: '简体中文'
 
 # Whether to use Demucs for vocal separation before transcription
 demucs: true
+demucs_config:
+  model: 'htdemucs_ft'
+  shifts: 2
+  overlap: 0.25
 
 whisper:
   # ["large-v3", "large-v3-turbo"]. Note: for zh model will force to use Belle/large-v3

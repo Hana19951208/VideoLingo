@@ -1,7 +1,7 @@
 import pandas as pd
 import json
 import concurrent.futures
-from core.translate_lines import translate_lines
+from core._4_2_translate_lines import translate_lines
 from core._4_1_summarize import search_things_to_note_in_prompt
 from core._8_1_audio_task import check_len_then_trim
 from core._6_gen_sub import align_timestamp
@@ -10,6 +10,7 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from difflib import SequenceMatcher
 from core.utils.models import *
+from core._shared_terminology import load_custom_terms
 console = Console()
 
 # Function to split text into chunks
@@ -39,11 +40,11 @@ def get_after_content(chunks, chunk_index):
     return None if chunk_index == len(chunks) - 1 else chunks[chunk_index + 1].split('\n')[:2] # Get first 2 lines
 
 # 🔍 Translate a single chunk
-def translate_chunk(chunk, chunks, theme_prompt, i):
+def translate_chunk(chunk, chunks, theme_prompt, custom_terms_json, i):
     things_to_note_prompt = search_things_to_note_in_prompt(chunk)
     previous_content_prompt = get_previous_content(chunks, i)
     after_content_prompt = get_after_content(chunks, i)
-    translation, english_result = translate_lines(chunk, previous_content_prompt, after_content_prompt, things_to_note_prompt, theme_prompt, i)
+    translation, english_result = translate_lines(chunk, previous_content_prompt, after_content_prompt, things_to_note_prompt, theme_prompt, custom_terms_json, i)
     return i, english_result, translation
 
 # Add similarity calculation function
@@ -57,6 +58,7 @@ def translate_all():
     chunks = split_chunks_by_chars(chunk_size=600, max_i=10)
     with open(_4_1_TERMINOLOGY, 'r', encoding='utf-8') as file:
         theme_prompt = json.load(file).get('theme')
+    custom_terms_json = load_custom_terms()
 
     # 🔄 Use concurrent execution for translation
     with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True) as progress:
@@ -64,7 +66,7 @@ def translate_all():
         with concurrent.futures.ThreadPoolExecutor(max_workers=load_key("max_workers")) as executor:
             futures = []
             for i, chunk in enumerate(chunks):
-                future = executor.submit(translate_chunk, chunk, chunks, theme_prompt, i)
+                future = executor.submit(translate_chunk, chunk, chunks, theme_prompt, custom_terms_json, i)
                 futures.append(future)
             results = []
             for future in concurrent.futures.as_completed(futures):

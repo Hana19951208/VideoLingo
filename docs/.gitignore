@@ -17,6 +17,7 @@ packages/nextra-theme-*/style.css
 .eslintcache
 .env
 *.md
+!frontend_rerun_pain_points.md
 
 tsup.config.bundled*
 tsconfig.tsbuildinfo
