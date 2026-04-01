@@ -179,3 +179,12 @@ runtime/
 dev/
 installer_files/
 logs/
+
+control_plane_web/node_modules/
+control_plane_web/dist/
+control_plane_web/*.tsbuildinfo
+config.local.yaml
+config.secrets.yaml
+control_plane.db
+stitch_videolingo/
+

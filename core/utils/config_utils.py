@@ -1,11 +1,17 @@
-from ruamel.yaml import YAML
+import os
 import threading
 
-CONFIG_PATH = 'config.yaml'
+from ruamel.yaml import YAML
+
+CONFIG_PATH = "config.yaml"
 lock = threading.Lock()
 
 yaml = YAML()
 yaml.preserve_quotes = True
+
+
+def _get_config_path():
+    return os.environ.get("VIDEOLINGO_CONFIG_PATH", CONFIG_PATH)
 
 # -----------------------
 # load & update config
@@ -13,7 +19,7 @@ yaml.preserve_quotes = True
 
 def load_key(key):
     with lock:
-        with open(CONFIG_PATH, 'r', encoding='utf-8') as file:
+        with open(_get_config_path(), 'r', encoding='utf-8') as file:
             data = yaml.load(file)
 
     keys = key.split('.')
@@ -27,7 +33,8 @@ def load_key(key):
 
 def update_key(key, new_value):
     with lock:
-        with open(CONFIG_PATH, 'r', encoding='utf-8') as file:
+        config_path = _get_config_path()
+        with open(config_path, 'r', encoding='utf-8') as file:
             data = yaml.load(file)
 
         keys = key.split('.')
@@ -40,7 +47,7 @@ def update_key(key, new_value):
 
         if isinstance(current, dict) and keys[-1] in current:
             current[keys[-1]] = new_value
-            with open(CONFIG_PATH, 'w', encoding='utf-8') as file:
+            with open(config_path, 'w', encoding='utf-8') as file:
                 yaml.dump(data, file)
             return True
         else:

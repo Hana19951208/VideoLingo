@@ -1,4 +1,4 @@
-# * Settings marked with * are advanced settings that won't appear in the Streamlit page and can only be modified manually in config.py
+﻿# * Settings marked with * are advanced settings that won't appear in the Streamlit page and can only be modified manually in config.py
 # recommend to set in streamlit page
 # -------------------
 # version: "3.0.0"
@@ -11,7 +11,7 @@ display_language: "zh-CN"
 
 # API settings
 api:
-  key: 'sk-05e4bbf007b34a2c9d015222643221f8'
+  key: 'YOUR_API_KEY'
   base_url: 'https://api.deepseek.com'
   model: 'deepseek-chat'
   llm_support_json: false
@@ -199,3 +199,4 @@ language_split_with_space:
 language_split_without_space:
 - 'zh'
 - 'ja'
+

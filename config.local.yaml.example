@@ -1,0 +1,5 @@
+﻿api:
+  key: 'YOUR_API_KEY'
+  base_url: 'https://api.deepseek.com'
+  model: 'deepseek-chat'
+  llm_support_json: false
