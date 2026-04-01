@@ -88,6 +88,7 @@ tts_method: 'custom_tts'
 # Local index-tts Docker API Configuration
 custom_tts:
   url: 'http://127.0.0.1:8000/v1/tts'
+  batch_url: 'http://127.0.0.1:8000/v1/tts/batch'
   reference_mode: 'auto_single'
   spk_audio: 'reference_audio.wav' # You MUST put the speaker clone reference audio file here
 

@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 
 class AudioMixingPipelineTests(unittest.TestCase):
@@ -26,6 +27,22 @@ class AudioMixingPipelineTests(unittest.TestCase):
         self.assertIn("sidechaincompress=", command[filter_index])
         self.assertIn("[v]", command)
         self.assertIn("[a]", command)
+
+    def test_build_dub_subtitle_entries_uses_bilingual_subtitles_when_source_exists(self):
+        from core._12_dub_to_vid import build_dub_subtitle_entries
+
+        with patch("core._12_dub_to_vid.os.path.exists", side_effect=lambda path: path == "output/dub_src.srt"):
+            subtitle_entries = build_dub_subtitle_entries()
+
+        self.assertEqual([entry["path"] for entry in subtitle_entries], ["output/dub_src.srt", "output/dub.srt"])
+
+    def test_build_dub_subtitle_entries_falls_back_to_translated_only_when_source_missing(self):
+        from core._12_dub_to_vid import build_dub_subtitle_entries
+
+        with patch("core._12_dub_to_vid.os.path.exists", return_value=False):
+            subtitle_entries = build_dub_subtitle_entries()
+
+        self.assertEqual([entry["path"] for entry in subtitle_entries], ["output/dub.srt"])
 
 
 if __name__ == "__main__":

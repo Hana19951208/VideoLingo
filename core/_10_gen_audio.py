@@ -13,7 +13,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from core.utils import *
 from core.utils.models import *
 from core.asr_backend.audio_preprocess import get_audio_duration
-from core.tts_backend.tts_main import tts_main
+from core.tts_backend.custom_tts import custom_tts_batch
+from core.tts_backend.tts_main import clean_text_for_tts, create_silence_audio, should_create_silence_for_text, tts_main
 
 console = Console()
 
@@ -70,7 +71,35 @@ def process_row(row: pd.Series, tasks_df: pd.DataFrame) -> Tuple[int, float]:
     """Helper function for processing single row data"""
     number = row['number']
     lines = eval(row['lines']) if isinstance(row['lines'], str) else row['lines']
+    tts_method = load_key("tts_method")
     real_dur = 0
+
+    if tts_method == "custom_tts":
+        batch_items = []
+        for line_index, line in enumerate(lines):
+            temp_file = TEMP_FILE_TEMPLATE.format(f"{number}_{line_index}")
+            if os.path.exists(temp_file):
+                continue
+            cleaned_line = clean_text_for_tts(line)
+            if should_create_silence_for_text(cleaned_line):
+                create_silence_audio(temp_file)
+                continue
+            batch_items.append(
+                {
+                    "id": f"{number}_{line_index}",
+                    "text": cleaned_line,
+                    "save_path": temp_file,
+                }
+            )
+
+        if batch_items:
+            custom_tts_batch(batch_items)
+
+        for line_index, _ in enumerate(lines):
+            temp_file = TEMP_FILE_TEMPLATE.format(f"{number}_{line_index}")
+            real_dur += get_audio_duration(temp_file)
+        return number, real_dur
+
     for line_index, line in enumerate(lines):
         temp_file = TEMP_FILE_TEMPLATE.format(f"{number}_{line_index}")
         tts_main(line, temp_file, number, tasks_df)

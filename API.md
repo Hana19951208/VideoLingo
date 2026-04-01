@@ -8,16 +8,21 @@ IndexTTS deployment.
 - Local Docker Compose: `http://127.0.0.1:8000`
 - Health check: `GET /healthz`
 - Synthesis: `POST /v1/tts`
+- Batch synthesis: `POST /v1/tts/batch`
 
 ## Runtime Notes
 
 - The service is designed for one long-lived process.
 - Requests are serialized with an internal lock because the model keeps mutable
   cache state.
+- The batch endpoint reduces repeated HTTP upload and prompt preprocessing, but
+  it does not enable true multi-request GPU parallel inference.
 - The container is configured for NVIDIA GPU inference. CPU-only startup is
   intentionally blocked by `--require_gpu`.
 - Audio outputs are written to `/app/outputs` inside the container and then
   returned to the caller.
+- The emotion analysis sub-model can be offloaded to CPU and loaded lazily to
+  reduce GPU memory pressure.
 
 ## Startup
 
@@ -109,6 +114,59 @@ Response:
 - The API runs inference synchronously and returns only after the WAV file is
   ready.
 
+## Batch Synthesis Endpoint
+
+### `POST /v1/tts/batch`
+
+Purpose:
+- Accept one speaker reference audio file
+- Accept multiple synthesis items in one request
+- Return a zip package with `manifest.json` and multiple wav files
+
+Request format:
+- `Content-Type: multipart/form-data`
+
+Response:
+- `Content-Type: application/zip`
+- `filename=tts_batch.zip`
+
+### Form Fields
+
+#### Required
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `items` | JSON string | A non-empty JSON array. Each item must contain `id` and `text`. |
+| `spk_audio` | file | Shared speaker prompt audio file for the whole batch. |
+
+#### Optional
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `emo_audio` | file | none | Shared emotion reference audio for the whole batch. |
+| `emo_alpha` | float | `1.0` | Emotion blend strength for the whole batch. |
+| `emo_vector` | JSON string | none | Shared 8-dimension emotion vector for the whole batch. |
+| `use_random` | bool | `false` | Whether to use random sampling in emotion vector selection. |
+| `max_text_tokens_per_segment` | int | `120` | Default max token count for items that do not set `max_text_tokens`. |
+
+### Batch Item Fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | string | yes | Stable item identifier. Also used as the wav filename stem. |
+| `text` | string | yes | Target text to synthesize. |
+| `emotion` | string | no | Text emotion hint for this single item. |
+| `max_text_tokens` | int | no | Item-level override for token segmentation length. |
+
+### Batch Behavior
+
+- The server processes the whole batch under one request lock.
+- Items are synthesized one by one inside that lock to preserve cache safety.
+- The main speedup comes from reusing the uploaded reference audio and reducing
+  repeated request overhead.
+- `manifest.json` contains one record per item with `status`, and failed items
+  are reported explicitly instead of being silently dropped.
+
 ## Examples
 
 ### Minimal request
@@ -155,6 +213,17 @@ curl.exe -X POST "http://127.0.0.1:8000/v1/tts" `
   --output "out_emo_text.wav"
 ```
 
+### Batch request
+
+Use `curl.exe` on Windows PowerShell:
+
+```powershell
+curl.exe -X POST "http://127.0.0.1:8000/v1/tts/batch" `
+  -F "items=[{\"id\":\"seg-1\",\"text\":\"第一句\"},{\"id\":\"seg-2\",\"text\":\"第二句\",\"emotion\":\"冷静\"}]" `
+  -F "spk_audio=@examples/voice_01.wav" `
+  --output "out_batch.zip"
+```
+
 ## Error Codes
 
 | Code | Meaning |
@@ -169,5 +238,6 @@ curl.exe -X POST "http://127.0.0.1:8000/v1/tts" `
   requests.
 - Do not run multiple Uvicorn workers for this service unless the model is made
   stateless. The current implementation is intentionally single-worker.
+- The recommended Docker defaults are `--fp16 --emotion_device cpu --lazy_emotion_model`.
 - If you need to expose this service publicly, add authentication and rate
   limiting in front of it.

@@ -192,7 +192,7 @@ AUDIO_STAGE = WorkflowStage(
     start_button_label="Start Audio Processing",
     runner_key="_audio_runner",
     video_path="output/output_dub.mp4",
-    success_message="Audio processing is complete! You can check the audio files in the `output` folder.",
+    success_message="Audio processing is complete! The dubbed video keeps bilingual subtitles while replacing the audio track.",
     steps=(
         WorkflowStep(
             stage_id="audio",
@@ -234,14 +234,14 @@ AUDIO_STAGE = WorkflowStage(
             step_id="c5_merge_full_audio",
             title="Merge full audio",
             run=_run_audio_merge_full_audio,
-            artifact_patterns=("output/dub.mp3", "output/dub.srt"),
+            artifact_patterns=("output/dub.mp3", "output/dub.srt", "output/dub_src.srt"),
             depends_on=("c4_generate_audio_segments",),
             preview_patterns=("logs/task_runner_errors.log",),
         ),
         WorkflowStep(
             stage_id="audio",
             step_id="c6_merge_video",
-            title="Merge final audio into video",
+            title="Merge final audio and bilingual subtitles into video",
             run=_run_audio_merge_video,
             artifact_patterns=("output/output_dub.mp4",),
             depends_on=("c5_merge_full_audio",),

@@ -1,3 +1,4 @@
+import os
 import platform
 import subprocess
 
@@ -16,15 +17,24 @@ console = Console()
 
 DUB_VIDEO = "output/output_dub.mp4"
 DUB_SUB_FILE = "output/dub.srt"
+DUB_SRC_SUB_FILE = "output/dub_src.srt"
 DUB_AUDIO = "output/dub.mp3"
 
+SRC_FONT_SIZE = 15
+SRC_FONT_NAME = "Arial"
 TRANS_FONT_SIZE = 17
 TRANS_FONT_NAME = "Arial"
 if platform.system() == "Linux":
+    SRC_FONT_NAME = "NotoSansCJK-Regular"
     TRANS_FONT_NAME = "NotoSansCJK-Regular"
 if platform.system() == "Darwin":
+    SRC_FONT_NAME = "Arial Unicode MS"
     TRANS_FONT_NAME = "Arial Unicode MS"
 
+SRC_FONT_COLOR = "&HFFFFFF"
+SRC_OUTLINE_COLOR = "&H000000"
+SRC_OUTLINE_WIDTH = 1
+SRC_SHADOW_COLOR = "&H80000000"
 TRANS_FONT_COLOR = "&H00FFFF"
 TRANS_OUTLINE_COLOR = "&H000000"
 TRANS_OUTLINE_WIDTH = 1
@@ -37,6 +47,33 @@ def build_audio_mix_filter():
         "[bg][2:a]sidechaincompress=threshold=0.015:ratio=8:attack=20:release=250[bgduck];"
         "[bgduck][2:a]amix=inputs=2:duration=first:dropout_transition=3[a]"
     )
+
+
+def build_dub_subtitle_entries():
+    subtitle_entries = []
+    if os.path.exists(DUB_SRC_SUB_FILE):
+        subtitle_entries.append(
+            {
+                "path": DUB_SRC_SUB_FILE,
+                "style": (
+                    f"FontSize={SRC_FONT_SIZE},FontName={SRC_FONT_NAME},"
+                    f"PrimaryColour={SRC_FONT_COLOR},OutlineColour={SRC_OUTLINE_COLOR},OutlineWidth={SRC_OUTLINE_WIDTH},"
+                    f"ShadowColour={SRC_SHADOW_COLOR},BorderStyle=1"
+                ),
+            }
+        )
+
+    subtitle_entries.append(
+        {
+            "path": DUB_SUB_FILE,
+            "style": (
+                f"FontSize={TRANS_FONT_SIZE},FontName={TRANS_FONT_NAME},"
+                f"PrimaryColour={TRANS_FONT_COLOR},OutlineColour={TRANS_OUTLINE_COLOR},OutlineWidth={TRANS_OUTLINE_WIDTH},"
+                f"BackColour={TRANS_BACK_COLOR},Alignment=2,MarginV=27,BorderStyle=4"
+            ),
+        }
+    )
+    return subtitle_entries
 
 
 def build_merge_command(video_file, background_file, normalized_dub_audio, subtitle_filter, ffmpeg_gpu):
@@ -87,16 +124,7 @@ def merge_video_audio():
         target_width=target_width,
         target_height=target_height,
         subtitle_mask=load_key("subtitle_mask"),
-        subtitle_files=[
-            {
-                "path": DUB_SUB_FILE,
-                "style": (
-                    f"FontSize={TRANS_FONT_SIZE},FontName={TRANS_FONT_NAME},"
-                    f"PrimaryColour={TRANS_FONT_COLOR},OutlineColour={TRANS_OUTLINE_COLOR},OutlineWidth={TRANS_OUTLINE_WIDTH},"
-                    f"BackColour={TRANS_BACK_COLOR},Alignment=2,MarginV=27,BorderStyle=4"
-                ),
-            }
-        ],
+        subtitle_files=build_dub_subtitle_entries(),
     )
 
     ffmpeg_gpu = load_key("ffmpeg_gpu")
