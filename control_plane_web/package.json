@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:e2e": "node ./scripts/playwright-review-flow.cjs",
+    "test:e2e:youtube": "node ./scripts/playwright-real-youtube-flow.cjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",

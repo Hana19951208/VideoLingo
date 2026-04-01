@@ -16,7 +16,8 @@ resampy==0.4.3
 spacy==3.8.11
 streamlit==1.49.1
 streamlit-searchbox
-yt-dlp
+yt-dlp>=2026.3.17
+yt-dlp-ejs>=0.8.0
 json-repair
 ruamel.yaml
 InquirerPy

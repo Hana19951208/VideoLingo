@@ -4,8 +4,11 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+
+from control_plane.source_ingest import RemoteSourceDownloadError
 
 
 class ControlPlaneApiTests(unittest.TestCase):
@@ -43,12 +46,16 @@ class ControlPlaneApiTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
+        self.local_video_path = self.temp_dir / "local-source.mp4"
+        self.local_video_path.write_bytes(b"fake-video")
 
         os.environ["VIDEOLINGO_CONTROL_DB"] = str(self.db_path)
         os.environ["VIDEOLINGO_ACTIVE_WORKSPACE"] = str(self.workspace_root)
         os.environ["VIDEOLINGO_HISTORY_ROOT"] = str(self.history_root)
         os.environ["VIDEOLINGO_LOG_ROOT"] = str(self.logs_root)
         os.environ["VIDEOLINGO_CONFIG_PATH"] = str(self.config_path)
+        os.environ["VIDEOLINGO_CONTROL_PLANE_WORKFLOW_MODE"] = "fixture"
+        os.environ["VIDEOLINGO_CONTROL_PLANE_STEP_DELAY_MS"] = "50"
 
         from control_plane.app import create_app
 
@@ -62,6 +69,8 @@ class ControlPlaneApiTests(unittest.TestCase):
             "VIDEOLINGO_HISTORY_ROOT",
             "VIDEOLINGO_LOG_ROOT",
             "VIDEOLINGO_CONFIG_PATH",
+            "VIDEOLINGO_CONTROL_PLANE_WORKFLOW_MODE",
+            "VIDEOLINGO_CONTROL_PLANE_STEP_DELAY_MS",
         ]:
             os.environ.pop(key, None)
 
@@ -91,12 +100,16 @@ class ControlPlaneApiTests(unittest.TestCase):
         self.assertEqual(settings_payload["global"]["api"]["base_url"], "https://example.com")
 
     def test_start_run_blocks_second_active_project(self):
+        first_source = self.temp_dir / "first.mp4"
+        second_source = self.temp_dir / "second.mp4"
+        first_source.write_bytes(b"first")
+        second_source.write_bytes(b"second")
         first_project = self.client.post(
             "/projects",
             json={
                 "name": "First",
                 "source_type": "upload",
-                "source_uri_or_path": "first.mp4",
+                "source_uri_or_path": str(first_source),
                 "source_lang": "en",
                 "target_lang": "zh-CN",
             },
@@ -106,7 +119,7 @@ class ControlPlaneApiTests(unittest.TestCase):
             json={
                 "name": "Second",
                 "source_type": "upload",
-                "source_uri_or_path": "second.mp4",
+                "source_uri_or_path": str(second_source),
                 "source_lang": "en",
                 "target_lang": "zh-CN",
             },
@@ -273,6 +286,69 @@ class ControlPlaneApiTests(unittest.TestCase):
         settings = workspace_response.json()["effective_settings"]
         self.assertEqual(settings["tts_method"]["value"], "openai_tts")
         self.assertEqual(settings["tts_method"]["source"], "global_override")
+
+    def test_start_run_copies_local_source_into_active_workspace(self):
+        project = self.client.post(
+            "/projects",
+            json={
+                "name": "Local Source",
+                "source_type": "upload",
+                "source_uri_or_path": str(self.local_video_path),
+                "source_lang": "en",
+                "target_lang": "zh-CN",
+            },
+        ).json()
+
+        response = self.client.post(f"/projects/{project['id']}/runs")
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["active_workspace_state"], "copied")
+        copied_file = self.workspace_root / "output" / "local-source.mp4"
+        self.assertTrue(copied_file.exists())
+
+    def test_start_run_downloads_remote_source_before_creating_run(self):
+        project = self.client.post(
+            "/projects",
+            json={
+                "name": "Remote Source",
+                "source_type": "remote_url",
+                "source_uri_or_path": "https://www.youtube.com/watch?v=test",
+                "source_lang": "en",
+                "target_lang": "zh-CN",
+            },
+        ).json()
+
+        def fake_download(url, save_path="output", resolution="1080"):
+            target = Path(save_path) / "downloaded.mp4"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(b"video")
+
+        with patch("control_plane.source_ingest.download_video", side_effect=fake_download) as mock_download:
+            response = self.client.post(f"/projects/{project['id']}/runs")
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["active_workspace_state"], "downloaded")
+        mock_download.assert_called_once()
+
+    def test_start_run_returns_clear_client_error_when_youtube_is_blocked(self):
+        project = self.client.post(
+            "/projects",
+            json={
+                "name": "Remote Error",
+                "source_type": "remote_url",
+                "source_uri_or_path": "https://www.youtube.com/watch?v=jYUZAF3ePFE",
+                "source_lang": "en",
+                "target_lang": "zh-CN",
+            },
+        ).json()
+
+        with patch(
+            "control_plane.app.materialize_project_source",
+            side_effect=RemoteSourceDownloadError("YouTube 当前要求额外的人机校验，请刷新 cookies 后重试"),
+        ):
+            response = self.client.post(f"/projects/{project['id']}/runs")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("YouTube 当前要求额外的人机校验", response.json()["detail"])
 
 
 if __name__ == "__main__":

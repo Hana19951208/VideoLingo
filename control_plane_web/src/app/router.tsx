@@ -4,7 +4,7 @@ import { Link, NavLink, Outlet, Route, Routes, useNavigate, useParams } from 're
 
 import { queryClient } from './query-client';
 import { api } from '../lib/api';
-import type { SubtitleReviewRow } from '../lib/types';
+import type { SubtitleReviewRow, WorkspaceResponse } from '../lib/types';
 
 const STATUS_LABELS: Record<string, string> = {
   draft: '未开始',
@@ -59,6 +59,11 @@ function isAudioPreview(path: string) {
 
 function isVideoPreview(path: string) {
   return ['.mp4', '.mov', '.webm', '.mkv'].some((suffix) => path.endsWith(suffix));
+}
+
+function getWorkspacePollingInterval(workspace: WorkspaceResponse | undefined) {
+  const status = workspace?.project.status;
+  return status === 'processing' || status === 'review_required' ? 1000 : false;
 }
 
 function ShellLayout() {
@@ -189,14 +194,17 @@ function CreateProjectPage() {
           <p>上传视频或粘贴链接，创建新的本地化处理任务。</p>
         </div>
       </div>
+      {createMutation.error instanceof Error ? (
+        <div className="panel" data-testid="create-project-error">{createMutation.error.message}</div>
+      ) : null}
       <form className="form-panel" onSubmit={handleSubmit}>
         <label>
           项目名称
-          <input value={name} onChange={(event) => setName(event.target.value)} placeholder="输入项目名称" required />
+          <input data-testid="create-project-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="输入项目名称" required />
         </label>
         <label>
           视频路径或链接
-          <input value={sourceUriOrPath} onChange={(event) => setSourceUriOrPath(event.target.value)} placeholder="本地路径或 YouTube / Bilibili 链接" required />
+          <input data-testid="create-project-source" value={sourceUriOrPath} onChange={(event) => setSourceUriOrPath(event.target.value)} placeholder="本地路径或 YouTube / Bilibili 链接" required />
         </label>
         <div className="grid-two">
           <label>
@@ -225,7 +233,7 @@ function CreateProjectPage() {
         </div>
         <div className="form-actions">
           <Link className="text-link" to="/">取消</Link>
-          <button className="primary-button" disabled={createMutation.isPending} type="submit">立即开始</button>
+          <button className="primary-button" data-testid="create-project-submit" disabled={createMutation.isPending} type="submit">立即开始</button>
         </div>
       </form>
     </section>
@@ -234,7 +242,11 @@ function CreateProjectPage() {
 
 function WorkspaceLayout() {
   const { projectId = '' } = useParams();
-  const { data, isLoading } = useQuery({ queryKey: ['workspace', projectId], queryFn: () => api.getWorkspace(projectId) });
+  const { data, isLoading } = useQuery({
+    queryKey: ['workspace', projectId],
+    queryFn: () => api.getWorkspace(projectId),
+    refetchInterval: (query) => getWorkspacePollingInterval(query.state.data as WorkspaceResponse | undefined),
+  });
 
   if (isLoading) {
     return <section className="page"><div className="empty-state">正在加载项目工作区...</div></section>;
@@ -258,7 +270,7 @@ function WorkspaceLayout() {
           <NavLink to={`/projects/${projectId}/logs-assets`}>日志与产物</NavLink>
         </nav>
         <div className="workspace-meta">
-          <span className={`status-tag status-${data.project.status}`}>{getStatusLabel(data.project.status)}</span>
+          <span className={`status-tag status-${data.project.status}`} data-testid="workspace-project-status">{getStatusLabel(data.project.status)}</span>
           <div className="progress-row compact-progress">
             <div className="progress-track"><div className="progress-fill" style={{ width: `${data.project.progress_pct}%` }} /></div>
             <span>{data.project.progress_pct}%</span>
@@ -275,7 +287,11 @@ function WorkspaceLayout() {
 function OverviewPage() {
   const { projectId = '' } = useParams();
   const queryClientRef = useQueryClient();
-  const { data } = useQuery({ queryKey: ['workspace', projectId], queryFn: () => api.getWorkspace(projectId) });
+  const { data } = useQuery({
+    queryKey: ['workspace', projectId],
+    queryFn: () => api.getWorkspace(projectId),
+    refetchInterval: (query) => getWorkspacePollingInterval(query.state.data as WorkspaceResponse | undefined),
+  });
   const startRunMutation = useMutation({
     mutationFn: () => api.startRun(projectId),
     onSuccess: async () => {
@@ -291,17 +307,20 @@ function OverviewPage() {
   return (
     <section className="page-section">
       <div className="card-grid">
-        <article className="info-card"><span>当前状态</span><strong>{getStatusLabel(data.project.status)}</strong></article>
+        <article className="info-card"><span>当前状态</span><strong data-testid="overview-project-status">{getStatusLabel(data.project.status)}</strong></article>
         <article className="info-card"><span>当前阶段</span><strong>{data.project.current_stage ?? '未开始'}</strong></article>
         <article className="info-card"><span>当前步骤</span><strong>{data.project.current_step ?? '未开始'}</strong></article>
       </div>
       <section className="panel">
         <div className="panel-header">
           <h2>关键配置摘要</h2>
-          <button className="primary-button small-button" disabled={startRunMutation.isPending || !!data.latest_run_id} onClick={() => startRunMutation.mutate()} type="button">
+          <button className="primary-button small-button" data-testid="overview-start-run" disabled={startRunMutation.isPending || !!data.latest_run_id} onClick={() => startRunMutation.mutate()} type="button">
             {data.latest_run_id ? '已有运行记录' : '启动项目运行'}
           </button>
         </div>
+        {startRunMutation.error instanceof Error ? (
+          <div className="empty-state" data-testid="overview-start-run-error">{startRunMutation.error.message}</div>
+        ) : null}
         <div className="settings-list">
           {Object.entries(data.effective_settings).map(([key, item]) => (
             <div className="settings-row" key={key}>
@@ -322,17 +341,37 @@ function OverviewPage() {
 
 function WorkflowPage() {
   const { projectId = '' } = useParams();
-  const { data } = useQuery({ queryKey: ['workspace', projectId], queryFn: () => api.getWorkspace(projectId) });
+  const queryClientRef = useQueryClient();
+  const { data } = useQuery({
+    queryKey: ['workspace', projectId],
+    queryFn: () => api.getWorkspace(projectId),
+    refetchInterval: (query) => getWorkspacePollingInterval(query.state.data as WorkspaceResponse | undefined),
+  });
   const runId = data?.latest_run_id;
+  const shouldPoll = getWorkspacePollingInterval(data);
   const { data: nodesResponse } = useQuery({
     queryKey: ['run-nodes', runId],
     queryFn: () => api.getRunNodes(runId!),
     enabled: Boolean(runId),
+    refetchInterval: shouldPoll,
   });
   const { data: artifactsResponse } = useQuery({
     queryKey: ['run-artifacts', runId],
     queryFn: () => api.getRunArtifacts(runId!),
     enabled: Boolean(runId),
+    refetchInterval: shouldPoll,
+  });
+  const actionMutation = useMutation({
+    mutationFn: ({ action, stepId }: { action: string; stepId: string }) => api.runAction(runId!, { action, step_id: stepId }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClientRef.invalidateQueries({ queryKey: ['workspace', projectId] }),
+        queryClientRef.invalidateQueries({ queryKey: ['projects'] }),
+        queryClientRef.invalidateQueries({ queryKey: ['run-nodes', runId] }),
+        queryClientRef.invalidateQueries({ queryKey: ['run-artifacts', runId] }),
+        queryClientRef.invalidateQueries({ queryKey: ['run-logs', runId] }),
+      ]);
+    },
   });
 
   const nodeMap = useMemo(() => new Map((nodesResponse?.nodes ?? []).map((node) => [node.step_id, node])), [nodesResponse]);
@@ -354,14 +393,54 @@ function WorkflowPage() {
               const files = artifactMap.get(step.step_id) ?? [];
               const isActive = step.step_id === data.project.current_step;
               return (
-                <article className={`workflow-node ${isActive ? 'active' : ''}`} key={step.step_id}>
+                <article className={`workflow-node ${isActive ? 'active' : ''}`} data-testid={`workflow-node-${step.step_id}`} key={step.step_id}>
                   <div className="node-header">
                     <span className="node-id">{step.step_id}</span>
-                    <span className={`status-tag status-${node?.status ?? 'pending'}`}>{getStatusLabel(node?.status)}</span>
+                    <span className={`status-tag status-${node?.status ?? 'pending'}`} data-testid={`workflow-node-status-${step.step_id}`}>{getStatusLabel(node?.status)}</span>
                   </div>
                   <h3>{step.title}</h3>
                   <p>依赖：{step.depends_on.length > 0 ? step.depends_on.join('、') : '无'}</p>
                   <p>产物：{files.length > 0 ? `${files.length} 个文件` : '暂无'}</p>
+                  {runId ? (
+                    <div className="stack-actions">
+                      <button
+                        className="ghost-button"
+                        data-testid={`workflow-action-run_step-${step.step_id}`}
+                        disabled={actionMutation.isPending}
+                        onClick={() => actionMutation.mutate({ action: 'run_step', stepId: step.step_id })}
+                        type="button"
+                      >
+                        仅运行本步
+                      </button>
+                      <button
+                        className="ghost-button"
+                        data-testid={`workflow-action-rerun_step-${step.step_id}`}
+                        disabled={actionMutation.isPending}
+                        onClick={() => actionMutation.mutate({ action: 'rerun_step', stepId: step.step_id })}
+                        type="button"
+                      >
+                        重跑本步
+                      </button>
+                      <button
+                        className="ghost-button"
+                        data-testid={`workflow-action-rerun_from_step-${step.step_id}`}
+                        disabled={actionMutation.isPending}
+                        onClick={() => actionMutation.mutate({ action: 'rerun_from_step', stepId: step.step_id })}
+                        type="button"
+                      >
+                        从本步重跑到结束
+                      </button>
+                      <button
+                        className="ghost-button"
+                        data-testid={`workflow-action-cleanup_step_and_downstream-${step.step_id}`}
+                        disabled={actionMutation.isPending}
+                        onClick={() => actionMutation.mutate({ action: 'cleanup_step_and_downstream', stepId: step.step_id })}
+                        type="button"
+                      >
+                        清理本步及下游
+                      </button>
+                    </div>
+                  ) : null}
                   <details>
                     <summary>查看详情</summary>
                     <div className="node-details">
@@ -400,8 +479,17 @@ function SubtitleReviewPage() {
   const queryClientRef = useQueryClient();
   const [searchText, setSearchText] = useState('');
   const [draftRows, setDraftRows] = useState<SubtitleReviewRow[]>([]);
-  const { data: workspace } = useQuery({ queryKey: ['workspace', projectId], queryFn: () => api.getWorkspace(projectId) });
-  const { data } = useQuery({ queryKey: ['subtitle-review', projectId], queryFn: () => api.getSubtitleReview(projectId) });
+  const { data: workspace } = useQuery({
+    queryKey: ['workspace', projectId],
+    queryFn: () => api.getWorkspace(projectId),
+    refetchInterval: (query) => getWorkspacePollingInterval(query.state.data as WorkspaceResponse | undefined),
+  });
+  const reviewPollingInterval = getWorkspacePollingInterval(workspace);
+  const { data } = useQuery({
+    queryKey: ['subtitle-review', projectId],
+    queryFn: () => api.getSubtitleReview(projectId),
+    refetchInterval: reviewPollingInterval,
+  });
 
   useEffect(() => {
     setDraftRows(data?.rows ?? []);
@@ -447,8 +535,8 @@ function SubtitleReviewPage() {
             <input value={searchText} onChange={(event) => setSearchText(event.target.value)} placeholder="搜索原文或译文" />
           </label>
           <div className="stack-actions">
-            <button className="primary-button small-button" onClick={() => saveMutation.mutate({ rows: draftRows })} type="button">保存修改</button>
-            <button className="ghost-button" onClick={() => approveMutation.mutate()} type="button">审阅通过并继续</button>
+            <button className="primary-button small-button" data-testid="subtitle-review-save" onClick={() => saveMutation.mutate({ rows: draftRows })} type="button">保存修改</button>
+            <button className="ghost-button" data-testid="subtitle-review-approve" onClick={() => approveMutation.mutate()} type="button">审阅通过并继续</button>
           </div>
         </div>
         <div className="panel review-table-panel">
@@ -460,10 +548,10 @@ function SubtitleReviewPage() {
             <div className="review-table-header"><span>时间</span><span>原文</span><span>译文</span></div>
             {filteredRows.length === 0 ? <div className="empty-state">暂无字幕数据。</div> : null}
             {filteredRows.map((row) => (
-              <div className="review-row" key={row.row_id}>
+              <div className="review-row" data-testid={`subtitle-review-row-${row.row_id}`} key={row.row_id}>
                 <span>{row.start} - {row.end}</span>
                 <span>{row.source_text}</span>
-                <textarea value={row.target_text} onChange={(event) => updateRow(row.row_id, event.target.value)} />
+                <textarea data-testid={`subtitle-review-target-${row.row_id}`} value={row.target_text} onChange={(event) => updateRow(row.row_id, event.target.value)} />
               </div>
             ))}
           </div>
@@ -505,17 +593,24 @@ function ArtifactPreview({ path }: { path: string | null }) {
 
 function LogsAssetsPage() {
   const { projectId = '' } = useParams();
-  const { data: workspace } = useQuery({ queryKey: ['workspace', projectId], queryFn: () => api.getWorkspace(projectId) });
+  const { data: workspace } = useQuery({
+    queryKey: ['workspace', projectId],
+    queryFn: () => api.getWorkspace(projectId),
+    refetchInterval: (query) => getWorkspacePollingInterval(query.state.data as WorkspaceResponse | undefined),
+  });
   const runId = workspace?.latest_run_id;
+  const refetchInterval = getWorkspacePollingInterval(workspace);
   const { data: logsResponse } = useQuery({
     queryKey: ['run-logs', runId],
     queryFn: () => api.getRunLogs(runId!),
     enabled: Boolean(runId),
+    refetchInterval,
   });
   const { data: artifactsResponse } = useQuery({
     queryKey: ['run-artifacts', runId],
     queryFn: () => api.getRunArtifacts(runId!),
     enabled: Boolean(runId),
+    refetchInterval,
   });
   const [selectedArtifact, setSelectedArtifact] = useState<string | null>(null);
 

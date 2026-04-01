@@ -11,6 +11,7 @@ from sqlmodel import select
 
 from control_plane.config_state import build_effective_settings, build_masked_global_settings
 from control_plane.db import init_db, session_scope
+from control_plane.execution import ControlPlaneRunManager, get_run_step
 from control_plane.models import NodeExecution, Project, Run
 from control_plane.repository import (
     create_project,
@@ -24,6 +25,7 @@ from control_plane.repository import (
 )
 from control_plane.runtime import get_log_root, get_workspace_root
 from control_plane.schemas import ProjectCreate, RunActionPayload, SettingsUpdate, SubtitleReviewPayload
+from control_plane.source_ingest import RemoteSourceDownloadError, materialize_project_source
 from control_plane.subtitle_review import read_review_payload, write_review_payload
 from control_plane.workflow_state import get_workspace_stages
 
@@ -85,6 +87,8 @@ def resolve_workspace_file(relative_path: str) -> Path:
 
 def create_app() -> FastAPI:
     init_db()
+    run_manager = ControlPlaneRunManager()
+    run_manager.recover_orphaned_runs()
     app = FastAPI(title='VideoLingo Control Plane')
     app.add_middleware(
         CORSMiddleware,
@@ -139,16 +143,28 @@ def create_app() -> FastAPI:
             if active_run is not None and active_run.project_id != project_id:
                 raise HTTPException(status_code=409, detail='active project is already running')
 
+            try:
+                source_state = materialize_project_source(project)
+            except FileNotFoundError as error:
+                raise HTTPException(status_code=400, detail=str(error)) from error
+            except RemoteSourceDownloadError as error:
+                raise HTTPException(status_code=400, detail=str(error)) from error
+            except Exception as error:
+                raise HTTPException(status_code=500, detail=f'prepare project source failed: {error}') from error
+
             run = create_run(
                 session,
                 project,
                 {key: data['value'] for key, data in build_effective_settings(session, project_id).items()},
+                active_workspace_state=source_state['source_state'],
             )
+            run_manager.start_run(run.id)
             return {
                 'id': str(run.id),
                 'project_id': str(run.project_id),
                 'status': run.status,
                 'started_at': run.started_at.isoformat(),
+                'active_workspace_state': run.active_workspace_state,
             }
 
     @app.post('/runs/{run_id}/actions')
@@ -158,14 +174,44 @@ def create_app() -> FastAPI:
             if run is None:
                 raise HTTPException(status_code=404, detail='run not found')
             project = session.get(Project, run.project_id)
-            if payload.action == 'approve_subtitles_and_continue' and project is not None:
-                project.status = 'processing'
-                project.current_stage = 'text'
-                project.current_step = 'b6_burn_video'
-                project.updated_at = utc_now()
-                session.add(project)
-                session.commit()
-            return {'run_id': str(run_id), 'accepted': True, 'action': payload.action}
+            if payload.action == 'approve_subtitles_and_continue':
+                if project is None:
+                    raise HTTPException(status_code=404, detail='project not found')
+                if run.status != 'review_required':
+                    raise HTTPException(status_code=409, detail='run is not waiting for subtitle review')
+                try:
+                    run_manager.start_run(run.id, start_step_id='b6_burn_video')
+                except RuntimeError as error:
+                    raise HTTPException(status_code=409, detail=str(error)) from error
+                return {'run_id': str(run_id), 'accepted': True, 'action': payload.action}
+
+            if payload.action in {'run_step', 'rerun_step', 'rerun_from_step', 'cleanup_step_and_downstream'}:
+                if not payload.step_id:
+                    raise HTTPException(status_code=400, detail='step_id is required for step actions')
+                try:
+                    step = get_run_step(payload.step_id)
+                except KeyError as error:
+                    raise HTTPException(status_code=400, detail=str(error)) from error
+                if payload.stage_id is not None and payload.stage_id != step.stage_id:
+                    raise HTTPException(status_code=400, detail='stage_id does not match step_id')
+
+                try:
+                    if payload.action == 'run_step':
+                        run_manager.start_run(run.id, only_step_id=step.step_id)
+                    elif payload.action == 'rerun_step':
+                        run_manager.reset_run_tail(run.id, step.step_id, include_downstream=False)
+                        run_manager.start_run(run.id, only_step_id=step.step_id)
+                    elif payload.action == 'rerun_from_step':
+                        run_manager.reset_run_tail(run.id, step.step_id, include_downstream=True)
+                        run_manager.start_run(run.id, start_step_id=step.step_id)
+                    else:
+                        run_manager.reset_run_tail(run.id, step.step_id, include_downstream=True)
+                except RuntimeError as error:
+                    raise HTTPException(status_code=409, detail=str(error)) from error
+
+                return {'run_id': str(run_id), 'accepted': True, 'action': payload.action}
+
+            raise HTTPException(status_code=400, detail='unknown run action')
 
     @app.get('/runs/{run_id}/nodes')
     def get_run_nodes(run_id: int):

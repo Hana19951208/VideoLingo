@@ -22,7 +22,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || `Request failed: ${response.status}`);
+    let message = text || `Request failed: ${response.status}`;
+    try {
+      const payload = JSON.parse(text) as { detail?: string };
+      message = payload.detail || message;
+    } catch {
+      // Ignore JSON parse errors and fall back to raw response text.
+    }
+    throw new Error(message);
   }
 
   return response.json() as Promise<T>;
