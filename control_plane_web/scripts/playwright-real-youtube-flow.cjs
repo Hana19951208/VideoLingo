@@ -7,6 +7,7 @@ const { chromium } = require('playwright');
 
 const repoRoot = path.resolve(__dirname, '..', '..');
 const webRoot = path.resolve(__dirname, '..');
+const repoPython = path.join(repoRoot, '.venv', 'Scripts', 'python.exe');
 const runtimeDir = path.join(repoRoot, 'runtime', `playwright_e2e_${randomUUID()}`);
 const backendLogPath = path.join(runtimeDir, 'backend.log');
 const frontendLogPath = path.join(runtimeDir, 'frontend.log');
@@ -69,6 +70,10 @@ function spawnProcess(command, args, options) {
   pipeOutput(child, options.logPath);
   childProcesses.push(child);
   return child;
+}
+
+function getBackendPythonCommand() {
+  return fs.existsSync(repoPython) ? repoPython : 'python';
 }
 
 async function waitForHttpOk(url, timeoutMs) {
@@ -174,7 +179,7 @@ async function run() {
   };
 
   const backend = spawnProcess(
-    'python',
+    getBackendPythonCommand(),
     ['-m', 'uvicorn', 'control_plane.app:create_app', '--factory', '--host', '127.0.0.1', '--port', String(backendPort)],
     {
       cwd: repoRoot,
