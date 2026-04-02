@@ -7,6 +7,8 @@ import pandas as pd
 
 from core.utils.models import _4_1_TERMINOLOGY
 
+CUSTOM_TERMS_PATH_ENV = "VIDEOLINGO_CUSTOM_TERMS_PATH"
+
 HEADER_ALIASES = {
     "src": ["source", "src"],
     "tgt": ["trans", "target", "translation", "tgt"],
@@ -38,11 +40,58 @@ def _select_column(frame, aliases, fallback_index):
     return None
 
 
+def _normalize_term_record(term):
+    src = _clean_value(term.get("src"))
+    tgt = _clean_value(term.get("tgt")) or src
+    note = _clean_value(term.get("note"))
+    return {"src": src, "tgt": tgt, "note": note}
+
+
+def _deduplicate_terms(terms):
+    deduped = []
+    seen = set()
+    for term in terms:
+        normalized_term = _normalize_term_record(term)
+        if not normalized_term["src"]:
+            continue
+        normalized_key = _normalize_key(normalized_term["src"])
+        if normalized_key in seen:
+            continue
+        seen.add(normalized_key)
+        deduped.append(normalized_term)
+    return {"terms": deduped}
+
+
+def resolve_custom_terms_path(path=None):
+    explicit_path = str(path) if path else ""
+    candidate_paths = []
+
+    env_path = os.getenv(CUSTOM_TERMS_PATH_ENV, "").strip()
+    if env_path:
+        candidate_paths.append(env_path)
+
+    if explicit_path:
+        candidate_paths.append(explicit_path)
+    else:
+        candidate_paths.extend(["custom_terms.json", "custom_terms.xlsx"])
+
+    for candidate_path in candidate_paths:
+        if candidate_path and os.path.exists(candidate_path):
+            return candidate_path
+    return explicit_path or env_path or ""
+
+
 def load_custom_terms(path="custom_terms.xlsx"):
-    if not os.path.exists(path):
+    resolved_path = resolve_custom_terms_path(path)
+    if not resolved_path or not os.path.exists(resolved_path):
         return {"terms": []}
 
-    frame = pd.read_excel(path)
+    if str(resolved_path).lower().endswith(".json"):
+        with open(resolved_path, "r", encoding="utf-8") as file:
+            payload = json.load(file)
+        return _deduplicate_terms(payload.get("terms", []))
+
+    frame = pd.read_excel(resolved_path)
     src_column = _select_column(frame, HEADER_ALIASES["src"], 0)
     tgt_column = _select_column(frame, HEADER_ALIASES["tgt"], 1)
     note_column = _select_column(frame, HEADER_ALIASES["note"], 2)
