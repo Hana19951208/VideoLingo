@@ -6,6 +6,8 @@ import sys
 
 from core.utils import *
 
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 
 def sanitize_filename(filename):
     filename = re.sub(r'[<>:"/\\|?*]', "", filename)
@@ -26,6 +28,22 @@ def update_ytdlp():
     return YoutubeDL
 
 
+def resolve_cookies_path(configured_cookies_path=""):
+    candidate_paths = []
+    if configured_cookies_path:
+        candidate_paths.append(configured_cookies_path)
+        if not os.path.isabs(configured_cookies_path):
+            candidate_paths.append(os.path.join(PROJECT_ROOT, configured_cookies_path))
+
+    candidate_paths.append(os.path.join(PROJECT_ROOT, "cookies.txt"))
+
+    for path in candidate_paths:
+        normalized_path = os.path.abspath(path)
+        if os.path.exists(normalized_path):
+            return normalized_path
+    return ""
+
+
 def build_ydl_opts(save_path="output", resolution="1080", cookies_path=""):
     ydl_opts = {
         "format": (
@@ -40,6 +58,7 @@ def build_ydl_opts(save_path="output", resolution="1080", cookies_path=""):
         "writeautomaticsub": False,
         "allsubtitles": False,
         "embedsubtitles": False,
+        "js_runtimes": {"deno": {}},
         "postprocessors": [{"key": "FFmpegThumbnailsConvertor", "format": "jpg"}],
     }
     if cookies_path and os.path.exists(cookies_path):
@@ -49,7 +68,7 @@ def build_ydl_opts(save_path="output", resolution="1080", cookies_path=""):
 
 def download_video_ytdlp(url, save_path="output", resolution="1080"):
     os.makedirs(save_path, exist_ok=True)
-    cookies_path = load_key("youtube.cookies_path")
+    cookies_path = resolve_cookies_path(load_key("youtube.cookies_path"))
     ydl_opts = build_ydl_opts(
         save_path=save_path,
         resolution=resolution,

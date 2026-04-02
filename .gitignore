@@ -179,3 +179,7 @@ runtime/
 dev/
 installer_files/
 logs/
+*.db
+cookies.txt
+control_plane_web/
+stitch_videolingo/
