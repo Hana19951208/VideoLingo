@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -112,6 +113,51 @@ def _prepare_local_input(run_app_dir, input_file):
     shutil.copy2(input_path, output_dir / input_path.name)
 
 
+def sanitize_run_name(name):
+    sanitized = re.sub(r'[<>:"/\\|?*]', "", str(name)).strip(". ").strip()
+    return sanitized or create_run_id()
+
+
+def pick_run_id(runs_dir, preferred_name):
+    runs_dir = Path(runs_dir)
+    base_name = sanitize_run_name(preferred_name)
+    candidate = base_name
+    suffix = 2
+    while (runs_dir / candidate).exists():
+        candidate = f"{base_name}-{suffix}"
+        suffix += 1
+    return candidate
+
+
+def _downloaded_media_title(output_dir, fallback_name):
+    output_dir = Path(output_dir)
+    allowed_extensions = {".mp4", ".mov", ".avi", ".mkv", ".flv", ".wmv", ".webm", ".wav", ".mp3", ".flac", ".m4a"}
+    media_files = [
+        path for path in output_dir.iterdir()
+        if path.is_file() and path.suffix.lower() in allowed_extensions
+    ]
+    if not media_files:
+        return fallback_name
+    media_files.sort(key=lambda path: path.stat().st_mtime, reverse=True)
+    return media_files[0].stem
+
+
+def _rename_run_dir(workspace_root, run_dir, preferred_name):
+    workspace_root = Path(workspace_root)
+    runs_dir = workspace_root / "runs"
+    final_run_id = pick_run_id(runs_dir, preferred_name)
+    final_run_dir = runs_dir / final_run_id
+    if final_run_dir != run_dir:
+        run_dir.rename(final_run_dir)
+    current_dir = workspace_root / "current"
+    current_dir.mkdir(parents=True, exist_ok=True)
+    (current_dir / "run.json").write_text(
+        json.dumps({"run_id": final_run_id, "run_dir": str(final_run_dir)}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return final_run_dir, final_run_id
+
+
 def _materialize_run(workspace_root, run_id):
     workspace_root = Path(workspace_root)
     run_dir = workspace_root / "runs" / run_id
@@ -121,6 +167,9 @@ def _materialize_run(workspace_root, run_id):
     shutil.copytree(workspace_root / "app_template", app_dir)
 
     shutil.copy2(workspace_root / "config" / "config.local.yaml", app_dir / "config.yaml")
+    workspace_cookies = workspace_root / "cookies.txt"
+    if workspace_cookies.exists():
+        shutil.copy2(workspace_cookies, app_dir / "cookies.txt")
     glossary_dir = run_dir / "glossary"
     glossary_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(workspace_root / "glossary" / "custom_terms.json", glossary_dir / "custom_terms.json")
@@ -176,17 +225,21 @@ def start_new_run(workspace_root=DEFAULT_WORKSPACE_ROOT, input_url=None, input_f
     if not input_url and not input_file:
         raise ValueError("Either input_url or input_file must be provided.")
 
-    run_id = create_run_id()
-    run_dir, app_dir = _materialize_run(workspace_root, run_id)
+    provisional_run_id = create_run_id()
+    run_dir, app_dir = _materialize_run(workspace_root, provisional_run_id)
     python_executable = _workspace_python(workspace_root)
     env = _build_env(run_dir)
     download_log = run_dir / "logs" / "download.log"
 
     if input_url:
         _run_download(python_executable, app_dir, env, input_url, resolution, download_log)
+        preferred_name = _downloaded_media_title(app_dir / "output", provisional_run_id)
     else:
         _prepare_local_input(app_dir, input_file)
+        preferred_name = Path(input_file).stem
 
+    run_dir, run_id = _rename_run_dir(workspace_root, run_dir, preferred_name)
+    app_dir = run_dir / "app"
     runner = WorkflowRunner(run_dir)
     review_payload = {
         "run_id": run_id,

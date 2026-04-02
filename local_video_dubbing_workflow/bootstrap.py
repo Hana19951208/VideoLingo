@@ -57,6 +57,15 @@ def import_terms_to_json(source_path, destination_path):
     return payload
 
 
+def copy_local_cookies(source_root, workspace_root):
+    source_cookies = Path(source_root) / "cookies.txt"
+    destination_cookies = Path(workspace_root) / "cookies.txt"
+    if source_cookies.exists():
+        shutil.copy2(source_cookies, destination_cookies)
+        return destination_cookies
+    return None
+
+
 def _copy_tree(source_root, workspace_root):
     app_template = workspace_root / "app_template"
     if app_template.exists():
@@ -101,11 +110,39 @@ def _copy_skill_scripts(workspace_root):
     shutil.copytree(repo_root() / "local_video_dubbing_workflow", bundled_package, ignore=shutil.ignore_patterns("__pycache__"))
 
 
-def create_workspace_venv(workspace_root):
+def _workspace_site_packages(venv_path):
+    if sys.platform.startswith("win"):
+        return venv_path / "Lib" / "site-packages"
+    python_version = f"python{sys.version_info.major}.{sys.version_info.minor}"
+    return venv_path / "lib" / python_version / "site-packages"
+
+
+def _repo_site_packages(repo_venv):
+    repo_venv = Path(repo_venv)
+    if sys.platform.startswith("win"):
+        return repo_venv / "Lib" / "site-packages"
+    python_version = f"python{sys.version_info.major}.{sys.version_info.minor}"
+    return repo_venv / "lib" / python_version / "site-packages"
+
+
+def create_workspace_venv(workspace_root, repo_venv=None):
+    workspace_root = Path(workspace_root)
     venv_path = workspace_root / ".venv"
-    if venv_path.exists():
-        return venv_path
-    subprocess.run([sys.executable, "-m", "venv", str(venv_path)], check=True)
+    if not venv_path.exists():
+        subprocess.run([sys.executable, "-m", "venv", str(venv_path)], check=True)
+
+    repo_venv = Path(repo_venv) if repo_venv else repo_root() / ".venv"
+    site_packages_dir = _workspace_site_packages(venv_path)
+    site_packages_dir.mkdir(parents=True, exist_ok=True)
+    bridge_paths = [
+        str(_repo_site_packages(repo_venv)),
+        str(workspace_root / "app_template"),
+        str(workspace_root / "local_video_dubbing_workflow"),
+    ]
+    (site_packages_dir / "videodubbing_workspace.pth").write_text(
+        "\n".join(bridge_paths) + "\n",
+        encoding="utf-8",
+    )
     return venv_path
 
 
@@ -125,6 +162,7 @@ def initialize_workspace(workspace_root=DEFAULT_WORKSPACE_ROOT, terms_source_pat
 
     glossary_source = Path(terms_source_path) if terms_source_path else source_root / "custom_terms.xlsx"
     glossary_payload = import_terms_to_json(glossary_source, workspace_root / "glossary" / "custom_terms.json")
+    copy_local_cookies(source_root, workspace_root)
 
     _write_workspace_gitignore(workspace_root)
     _copy_skill_scripts(workspace_root)
