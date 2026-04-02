@@ -9,7 +9,7 @@ def get_db_path() -> Path:
 
 
 def get_workspace_root() -> Path:
-    return Path(os.environ.get("VIDEOLINGO_ACTIVE_WORKSPACE", "output"))
+    return Path(os.environ.get("VIDEOLINGO_ACTIVE_WORKSPACE", "."))
 
 
 def get_history_root() -> Path:
@@ -23,4 +23,3 @@ def get_log_root() -> Path:
 def ensure_runtime_dirs() -> None:
     for path in [get_db_path().parent, get_workspace_root(), get_history_root(), get_log_root()]:
         path.mkdir(parents=True, exist_ok=True)
-

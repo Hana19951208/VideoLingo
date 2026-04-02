@@ -30,16 +30,26 @@ def list_projects(session) -> list[Project]:
 
 
 def get_active_run(session) -> Run | None:
-    return session.exec(select(Run).where(Run.status == 'processing')).first()
+    return session.exec(select(Run).where(Run.status.in_(('processing', 'review_required')))).first()
 
 
-def create_run(session, project: Project, config_snapshot: dict[str, Any]) -> Run:
+def create_run(
+    session,
+    project: Project,
+    config_snapshot: dict[str, Any],
+    active_workspace_state: str | None = None,
+) -> Run:
     project.status = 'processing'
     project.current_stage = 'text'
     project.current_step = 'b1_asr'
     project.progress_pct = 1
     project.updated_at = utc_now()
-    run = Run(project_id=project.id, status='processing', config_snapshot_json=json.dumps(config_snapshot, ensure_ascii=False))
+    run = Run(
+        project_id=project.id,
+        status='processing',
+        active_workspace_state=active_workspace_state,
+        config_snapshot_json=json.dumps(config_snapshot, ensure_ascii=False),
+    )
     session.add(run)
     session.commit()
     session.refresh(run)

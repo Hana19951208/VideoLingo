@@ -67,6 +67,7 @@
     "Generate all audio": "生成所有音频",
     "Select automatic reference audio": "选择自动参考音频",
     "Merge full audio": "合并完整音频",
+    "Generate and merge audio files": "生成和合并音频文件",
     "Merge final audio into video": "将最终音频合并到视频中",
     "Merge final audio and bilingual subtitles into video": "合并最终音频与双语字幕到视频",
     "Start Audio Processing": "开始音频处理",
