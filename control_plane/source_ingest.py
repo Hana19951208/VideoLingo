@@ -97,11 +97,12 @@ def prepare_remote_source(url: str) -> None:
 def iter_root_youtube_cookiefiles() -> list[Path]:
     project_root = get_project_root()
     return sorted(
-        (
+        {
             candidate
-            for candidate in project_root.glob('www.youtube.com_cookies*.txt')
+            for pattern in ('cookies.txt', 'www.youtube.com_cookies*.txt')
+            for candidate in project_root.glob(pattern)
             if candidate.is_file()
-        ),
+        },
         key=lambda item: (item.stat().st_mtime, item.name),
         reverse=True,
     )
@@ -119,8 +120,16 @@ def resolve_youtube_cookiefile(configured_path: str | None) -> str | None:
     return None
 
 
-def detect_node_runtime() -> str | None:
-    return which('node')
+def detect_js_runtime() -> tuple[str, str] | None:
+    deno_path = which('deno')
+    if deno_path:
+        return ('deno', deno_path)
+
+    node_path = which('node')
+    if node_path:
+        return ('node', node_path)
+
+    return None
 
 
 def build_ytdlp_options(save_path: str, resolution: str, cookiefile: str | None = None) -> dict:
@@ -140,9 +149,10 @@ def build_ytdlp_options(save_path: str, resolution: str, cookiefile: str | None 
         'postprocessors': [{'key': 'FFmpegThumbnailsConvertor', 'format': 'jpg'}],
         'quiet': False,
     }
-    node_path = detect_node_runtime()
-    if node_path:
-        options['js_runtimes'] = {'node': {'path': node_path}}
+    js_runtime = detect_js_runtime()
+    if js_runtime:
+        runtime_name, runtime_path = js_runtime
+        options['js_runtimes'] = {runtime_name: {'path': runtime_path}}
     if cookiefile and os.path.exists(cookiefile):
         options['cookiefile'] = cookiefile
     return options

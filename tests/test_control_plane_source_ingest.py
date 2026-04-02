@@ -71,7 +71,7 @@ class ControlPlaneSourceIngestTests(unittest.TestCase):
                 'control_plane.source_ingest.get_project_root',
                 return_value=Path(temp_dir),
                 create=True,
-            ), patch('control_plane.source_ingest.detect_node_runtime', return_value='D:/node.exe'), patch.dict(
+            ), patch('control_plane.source_ingest.detect_js_runtime', return_value=('node', 'D:/node.exe')), patch.dict(
                 'sys.modules',
                 {'yt_dlp': SimpleNamespace(YoutubeDL=_RetryYoutubeDL)},
             ):
@@ -90,8 +90,8 @@ class ControlPlaneSourceIngestTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='videolingo_source_ingest_') as temp_dir:
             old_cookie = Path(temp_dir) / 'www.youtube.com_cookies.txt'
             old_cookie.write_text('cookie-old', encoding='utf-8')
-            fallback_cookie = Path(temp_dir) / 'www.youtube.com_cookies_v2.txt'
-            fallback_cookie.write_text('cookie-v2', encoding='utf-8')
+            fallback_cookie = Path(temp_dir) / 'cookies.txt'
+            fallback_cookie.write_text('cookie-generic', encoding='utf-8')
             _RetryYoutubeDL.calls = []
             _RetryYoutubeDL.attempt = 0
 
@@ -99,7 +99,7 @@ class ControlPlaneSourceIngestTests(unittest.TestCase):
                 'control_plane.source_ingest.get_project_root',
                 return_value=Path(temp_dir),
                 create=True,
-            ), patch('control_plane.source_ingest.detect_node_runtime', return_value=None), patch.dict(
+            ), patch('control_plane.source_ingest.detect_js_runtime', return_value=('deno', 'D:/deno.exe')), patch.dict(
                 'sys.modules',
                 {'yt_dlp': SimpleNamespace(YoutubeDL=_RetryYoutubeDL)},
             ):
@@ -112,6 +112,7 @@ class ControlPlaneSourceIngestTests(unittest.TestCase):
         self.assertEqual(len(_RetryYoutubeDL.calls), 2)
         self.assertNotIn('cookiefile', _RetryYoutubeDL.calls[0])
         self.assertEqual(Path(_RetryYoutubeDL.calls[1]['cookiefile']), fallback_cookie)
+        self.assertEqual(_RetryYoutubeDL.calls[0]['js_runtimes'], {'deno': {'path': 'D:/deno.exe'}})
 
     def test_resolve_youtube_cookiefile_prefers_newer_root_export_when_config_empty(self):
         with tempfile.TemporaryDirectory(prefix='videolingo_source_ingest_') as temp_dir:
@@ -127,6 +128,28 @@ class ControlPlaneSourceIngestTests(unittest.TestCase):
 
         self.assertEqual(Path(resolved), latest_cookie)
 
+    def test_resolve_youtube_cookiefile_accepts_generic_cookies_filename(self):
+        with tempfile.TemporaryDirectory(prefix='videolingo_source_ingest_') as temp_dir:
+            generic_cookie = Path(temp_dir) / 'cookies.txt'
+            generic_cookie.write_text('cookie-generic', encoding='utf-8')
+
+            with patch('control_plane.source_ingest.get_project_root', return_value=Path(temp_dir), create=True):
+                resolved = source_ingest.resolve_youtube_cookiefile('')
+
+        self.assertEqual(Path(resolved), generic_cookie)
+
+    def test_detect_js_runtime_prefers_deno_over_node(self):
+        with patch('control_plane.source_ingest.which', side_effect=['D:/deno.exe', 'D:/node.exe']):
+            runtime = source_ingest.detect_js_runtime()
+
+        self.assertEqual(runtime, ('deno', 'D:/deno.exe'))
+
+    def test_detect_js_runtime_falls_back_to_node(self):
+        with patch('control_plane.source_ingest.which', side_effect=[None, 'D:/node.exe']):
+            runtime = source_ingest.detect_js_runtime()
+
+        self.assertEqual(runtime, ('node', 'D:/node.exe'))
+
     def test_download_video_raises_clear_error_after_cookie_retry_fails(self):
         with tempfile.TemporaryDirectory(prefix='videolingo_source_ingest_') as temp_dir:
             fallback_cookie = Path(temp_dir) / 'www.youtube.com_cookies.txt'
@@ -136,7 +159,7 @@ class ControlPlaneSourceIngestTests(unittest.TestCase):
                 'control_plane.source_ingest.get_project_root',
                 return_value=Path(temp_dir),
                 create=True,
-            ), patch('control_plane.source_ingest.detect_node_runtime', return_value='D:/node.exe'), patch.dict(
+            ), patch('control_plane.source_ingest.detect_js_runtime', return_value=('node', 'D:/node.exe')), patch.dict(
                 'sys.modules',
                 {'yt_dlp': SimpleNamespace(YoutubeDL=_AlwaysFailYoutubeDL)},
             ):
