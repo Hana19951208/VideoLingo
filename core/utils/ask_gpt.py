@@ -42,7 +42,7 @@ def _load_cache(prompt, resp_type, log_title):
 
 @except_handler("GPT request failed", retry=5)
 def ask_gpt(prompt, resp_type=None, valid_def=None, log_title="default"):
-    api_key = os.getenv("DEEPSEEK_API_KEY", "").strip() or load_key("api.key")
+    api_key = str(load_key("api.key")).strip()
     if not api_key:
         raise ValueError("API key is not set")
     # check cache

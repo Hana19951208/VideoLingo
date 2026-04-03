@@ -20,7 +20,7 @@ class YtDlpOptionsTests(unittest.TestCase):
 
         self.assertEqual(opts["js_runtimes"], {"deno": {}})
 
-    def test_download_video_uses_repo_cookies_when_config_is_empty(self):
+    def test_download_video_uses_default_skill_cookies_when_config_is_empty(self):
         from core._1_ytdlp import download_video_ytdlp
 
         captured_opts = {}
@@ -40,16 +40,17 @@ class YtDlpOptionsTests(unittest.TestCase):
 
         def fake_exists(path):
             normalized_path = path.replace("\\", "/")
-            return normalized_path.endswith("/cookies.txt") or normalized_path.endswith("/output")
+            return normalized_path.endswith("/state/cookies.txt") or normalized_path.endswith("/output")
 
-        with patch("core._1_ytdlp.load_key", side_effect=["", ["mp4", "webm"]]):
-            with patch("core._1_ytdlp.update_ytdlp", return_value=FakeYoutubeDL):
-                with patch("core._1_ytdlp.os.path.exists", side_effect=fake_exists):
-                    with patch("core._1_ytdlp.os.listdir", return_value=[]):
-                        with patch("core._1_ytdlp.os.makedirs"):
-                            download_video_ytdlp("https://www.youtube.com/watch?v=test", resolution="720")
+        with patch.dict("os.environ", {"VIDEOLINGO_DEFAULT_COOKIES_PATH": r"C:\skill\state\cookies.txt"}, clear=False):
+            with patch("core._1_ytdlp.load_key", side_effect=["", ["mp4", "webm"]]):
+                with patch("core._1_ytdlp.update_ytdlp", return_value=FakeYoutubeDL):
+                    with patch("core._1_ytdlp.os.path.exists", side_effect=fake_exists):
+                        with patch("core._1_ytdlp.os.listdir", return_value=[]):
+                            with patch("core._1_ytdlp.os.makedirs"):
+                                download_video_ytdlp("https://www.youtube.com/watch?v=test", resolution="720")
 
-        self.assertTrue(captured_opts["cookiefile"].replace("\\", "/").endswith("/cookies.txt"))
+        self.assertTrue(captured_opts["cookiefile"].replace("\\", "/").endswith("/state/cookies.txt"))
 
 
 class SubtitleMaskFilterTests(unittest.TestCase):

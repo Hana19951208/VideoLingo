@@ -5,8 +5,11 @@ import subprocess
 import sys
 
 from core.utils import *
+from core.utils.config_utils import get_config_path
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DEFAULT_COOKIES_PATH_ENV = "VIDEOLINGO_DEFAULT_COOKIES_PATH"
+RUNTIME_ROOT_ENV = "VIDEOLINGO_RUNTIME_ROOT"
 
 
 def sanitize_filename(filename):
@@ -30,12 +33,18 @@ def update_ytdlp():
 
 def resolve_cookies_path(configured_cookies_path=""):
     candidate_paths = []
+    config_dir = get_config_path().resolve().parent
     if configured_cookies_path:
         candidate_paths.append(configured_cookies_path)
         if not os.path.isabs(configured_cookies_path):
-            candidate_paths.append(os.path.join(PROJECT_ROOT, configured_cookies_path))
+            candidate_paths.append(os.path.join(str(config_dir), configured_cookies_path))
 
-    candidate_paths.append(os.path.join(PROJECT_ROOT, "cookies.txt"))
+    default_cookies_path = os.getenv(DEFAULT_COOKIES_PATH_ENV, "").strip()
+    if default_cookies_path:
+        candidate_paths.append(default_cookies_path)
+
+    runtime_root = os.getenv(RUNTIME_ROOT_ENV, "").strip() or PROJECT_ROOT
+    candidate_paths.append(os.path.join(runtime_root, "cookies.txt"))
 
     for path in candidate_paths:
         normalized_path = os.path.abspath(path)

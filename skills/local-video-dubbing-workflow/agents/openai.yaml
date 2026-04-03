@@ -1,4 +1,0 @@
-interface:
-  display_name: "Local Video Dubbing Workflow"
-  short_description: "Run local video translation and dubbing workflows"
-  default_prompt: "Use this skill to bootstrap and run the local video dubbing workflow, including b4 review and resume."

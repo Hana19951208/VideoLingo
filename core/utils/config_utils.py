@@ -1,8 +1,14 @@
-from ruamel.yaml import YAML
+import os
+import re
 import threading
+from pathlib import Path
+
+from ruamel.yaml import YAML
 
 CONFIG_PATH = 'config.yaml'
+CONFIG_PATH_ENV = "VIDEOLINGO_CONFIG_PATH"
 lock = threading.Lock()
+ENV_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
 yaml = YAML()
 yaml.preserve_quotes = True
@@ -11,9 +17,32 @@ yaml.preserve_quotes = True
 # load & update config
 # -----------------------
 
+def get_config_path():
+    configured_path = os.getenv(CONFIG_PATH_ENV, "").strip()
+    if configured_path:
+        return Path(configured_path)
+    return Path(CONFIG_PATH)
+
+
+def _resolve_env_placeholders(value):
+    if isinstance(value, str):
+        def replace(match):
+            env_name = match.group(1)
+            if env_name not in os.environ:
+                raise KeyError(f"Environment variable '{env_name}' is not set")
+            return os.environ[env_name]
+
+        return ENV_PATTERN.sub(replace, value)
+    if isinstance(value, list):
+        return [_resolve_env_placeholders(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _resolve_env_placeholders(item) for key, item in value.items()}
+    return value
+
+
 def load_key(key):
     with lock:
-        with open(CONFIG_PATH, 'r', encoding='utf-8') as file:
+        with get_config_path().open('r', encoding='utf-8') as file:
             data = yaml.load(file)
 
     keys = key.split('.')
@@ -23,11 +52,12 @@ def load_key(key):
             value = value[k]
         else:
             raise KeyError(f"Key '{k}' not found in configuration")
-    return value
+    return _resolve_env_placeholders(value)
 
 def update_key(key, new_value):
     with lock:
-        with open(CONFIG_PATH, 'r', encoding='utf-8') as file:
+        config_path = get_config_path()
+        with config_path.open('r', encoding='utf-8') as file:
             data = yaml.load(file)
 
         keys = key.split('.')
@@ -40,7 +70,7 @@ def update_key(key, new_value):
 
         if isinstance(current, dict) and keys[-1] in current:
             current[keys[-1]] = new_value
-            with open(CONFIG_PATH, 'w', encoding='utf-8') as file:
+            with config_path.open('w', encoding='utf-8') as file:
                 yaml.dump(data, file)
             return True
         else:

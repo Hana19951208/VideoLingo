@@ -11,7 +11,7 @@ display_language: "zh-CN"
 
 # API settings
 api:
-  key: 'sk-05e4bbf007b34a2c9d015222643221f8'
+  key: '${VIDEOLINGO_API_KEY}'
   base_url: 'https://api.deepseek.com'
   model: 'deepseek-chat'
   llm_support_json: false
